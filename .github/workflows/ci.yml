@@ -106,16 +106,22 @@ jobs:
         run: |
           docker build \
             -t ghcr.io/${{ env.GHCR_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} \
-            -t ghcr.io/${{ env.GHCR_USERNAME }}/${{ env.IMAGE_NAME }}:latest \
             .
 
       - name: Push Docker image
         run: |
           docker push ghcr.io/${{ env.GHCR_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
-          docker push ghcr.io/${{ env.GHCR_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Remove local Docker image
+        run: |
+          docker image rm ghcr.io/${{ env.GHCR_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
 
       - name: Logout Docker
         run: docker logout ghcr.io
+
+      - name: Cleanup workspace (Remove .env)
+        if: always()
+        run: rm -f .env
 
   deploy-dev:
     name: Deploy to Development
@@ -156,14 +162,20 @@ jobs:
 
       - name: SSH - Generate .env file dari secret
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          DEV_ENV_FILE: ${{ secrets.DEV_ENV_FILE }}
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
           port: ${{ secrets.DEV_SSH_PORT || '22' }}
           key: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
+          envs: DEV_ENV_FILE
           script: |
             cd ~/pyconid26-be-dev
-            chmod 644 .env
+            
+            # Tulis ulang .env dari secret di GitHub
+            echo "$DEV_ENV_FILE" > .env
+            chmod 600 .env
 
             # Update IMAGE_TAG di .env sesuai version.txt
             VERSION=$(cat version.txt)
@@ -178,7 +190,7 @@ jobs:
 
             # Pull dan deploy
             docker compose --env-file .env pull
-            docker compose --env-file .env up -d
+            docker compose --env-file .env up -d --force-recreate
 
   deploy-prod:
     name: Deploy to Production
@@ -219,14 +231,20 @@ jobs:
 
       - name: SSH - Generate .env file dari secret
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          PROD_ENV_FILE: ${{ secrets.PROD_ENV_FILE }}
         with:
           host: ${{ secrets.PROD_SSH_HOST }}
           username: ${{ secrets.PROD_SSH_USER }}
           port: ${{ secrets.PROD_SSH_PORT || '22' }}
           key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          envs: PROD_ENV_FILE
           script: |
             cd ~/pyconid26-be-prod
-            chmod 644 .env
+            
+            # Tulis ulang .env dari secret di GitHub
+            echo "$PROD_ENV_FILE" > .env
+            chmod 600 .env
 
             # Update IMAGE_TAG di .env sesuai version.txt
             VERSION=$(cat version.txt)
@@ -241,4 +259,4 @@ jobs:
 
             # Pull dan deploy
             docker compose --env-file .env pull
-            docker compose --env-file .env up -d
+            docker compose --env-file .env up -d --force-recreate
