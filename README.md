@@ -1,5 +1,5 @@
-# pyconid25-be
-BE for PyCon ID 2025 website
+# pyconid-be
+BE for PyCon ID website since 2025
 
 ## Requirements
 - python 3.12
