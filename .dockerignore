@@ -1,0 +1,10 @@
+.git
+.github
+.env
+.env.example
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
