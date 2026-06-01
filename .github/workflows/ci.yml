@@ -124,7 +124,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: development
-      url: https://dev-api.pycon.id
+      url: https://2026-api-dev.pycon.id/
 
     steps:
       - uses: actions/checkout@v4
@@ -151,7 +151,7 @@ jobs:
           port: ${{ secrets.DEV_SSH_PORT || '22' }}
           key: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
           source: "docker-compose.yaml,version.txt"
-          target: /home/${{ secrets.DEV_SSH_USER }}/pyconid25-be-dev/
+          target: /home/${{ secrets.DEV_SSH_USER }}/pyconid26-be-dev/
           overwrite: true
 
       - name: SSH - Generate .env file dari secret
@@ -162,7 +162,7 @@ jobs:
           port: ${{ secrets.DEV_SSH_PORT || '22' }}
           key: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
           script: |
-            cd ~/pyconid25-be-dev
+            cd ~/pyconid26-be-dev
             chmod 644 .env
 
             # Update IMAGE_TAG di .env sesuai version.txt
@@ -187,7 +187,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: https://api.pycon.id
+      url: https://2026-api.pycon.id/
 
     steps:
       - uses: actions/checkout@v4
@@ -214,7 +214,7 @@ jobs:
           port: ${{ secrets.PROD_SSH_PORT || '22' }}
           key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
           source: "docker-compose.yaml,version.txt"
-          target: /home/${{ secrets.PROD_SSH_USER }}/pyconid25-be-prod/
+          target: /home/${{ secrets.PROD_SSH_USER }}/pyconid26-be-prod/
           overwrite: true
 
       - name: SSH - Generate .env file dari secret
@@ -225,7 +225,7 @@ jobs:
           port: ${{ secrets.PROD_SSH_PORT || '22' }}
           key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
           script: |
-            cd ~/pyconid25-be-prod
+            cd ~/pyconid26-be-prod
             chmod 644 .env
 
             # Update IMAGE_TAG di .env sesuai version.txt
