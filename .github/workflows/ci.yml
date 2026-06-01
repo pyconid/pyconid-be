@@ -173,9 +173,11 @@ jobs:
           script: |
             cd ~/pyconid26-be-dev
             
-            # Tulis ulang .env dari secret di GitHub
             echo "$DEV_ENV_FILE" > .env
-            chmod 600 .env
+            chmod 644 .env
+
+            mkdir -p storage
+            chmod 775 storage
 
             # Update IMAGE_TAG di .env sesuai version.txt
             VERSION=$(cat version.txt)
@@ -242,11 +244,12 @@ jobs:
           script: |
             cd ~/pyconid26-be-prod
             
-            # Tulis ulang .env dari secret di GitHub
             echo "$PROD_ENV_FILE" > .env
-            chmod 600 .env
+            chmod 644 .env
 
-            # Update IMAGE_TAG di .env sesuai version.txt
+            mkdir -p storage
+            chmod 775 storage
+
             VERSION=$(cat version.txt)
             if grep -q '^IMAGE_TAG=' .env; then
               sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" .env
