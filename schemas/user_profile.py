@@ -181,6 +181,8 @@ class UserProfilePublic(UserProfileBase):
     share_my_location: Optional[bool] = False
     share_my_interest: Optional[bool] = False
     share_my_public_social_media: Optional[bool] = False
+    share_my_data_to_sponsor: Optional[bool] = False
+    retain_my_data_for_next_pycon: Optional[bool] = False
     coc_acknowledged: Optional[bool] = False
     terms_agreed: Optional[bool] = False
     privacy_agreed: Optional[bool] = False
@@ -337,6 +339,12 @@ class UserProfileCreate(UserProfileUpdateBase):
     share_my_public_social_media: Optional[bool] = Field(
         None, description="Allow sharing social media profiles."
     )
+    share_my_data_to_sponsor: Optional[bool] = Field(
+        None, description="Opt-in to share data with sponsors."
+    )
+    retain_my_data_for_next_pycon: Optional[bool] = Field(
+        None, description="Opt-in to retain data for the next PyCon ID."
+    )
 
     # Agreements
     coc_acknowledged: bool = Field(..., description="Code of Conduct acknowledgement.")
@@ -389,6 +397,8 @@ class UserProfileEditSuccessResponse(UserProfileDB):
                 "linkedin_username": "",
                 "twitter_username": "string",
                 "instagram_username": "string",
+                "share_my_data_to_sponsor": True,
+                "retain_my_data_for_next_pycon": True,
                 "coc_acknowledged": True,
                 "terms_agreed": True,
                 "privacy_agreed": True,

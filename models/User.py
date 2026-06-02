@@ -90,6 +90,12 @@ class User(Base):
     share_my_public_social_media: Mapped[bool] = mapped_column(
         "share_my_public_social_media", Boolean, nullable=True
     )
+    share_my_data_to_sponsor: Mapped[bool] = mapped_column(
+        "share_my_data_to_sponsor", Boolean, nullable=True
+    )
+    retain_my_data_for_next_pycon: Mapped[bool] = mapped_column(
+        "retain_my_data_for_next_pycon", Boolean, nullable=True
+    )
     terms_agreed: Mapped[bool] = mapped_column(
         "terms_agreed", Boolean, nullable=True, default=False
     )
