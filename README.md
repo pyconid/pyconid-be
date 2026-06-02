@@ -11,8 +11,8 @@ BE for PyCon ID website since 2025
 - install depedency ke virtual environtment `pip install -r requirements.txt`
 - copy file .env.example menjadi .env `cp .env.example .env` lalu isi berdasarkan konfigurasi postgresql
 - jika belum ada atau update data lokasi (negara, provinsi, kota) jalankan `python cli.py download-location-data`
-- seeder initial data `python cli.py initial-data`
 - migrasi tabel menggunakan alembic `alembic upgrade head`
+- seeder initial data `python cli.py initial-data`
 - jalankan aplikasi `uvicorn main:app --reload`
 - buka openapi doc di http://localhost:8000/docs
 
@@ -99,4 +99,3 @@ SELECT has_schema_privilege('public', 'CREATE');`
 ```
 
 Luarannya: `t` (true) jika sudah benar. Setelah ini dapat menjalankan alembic kembali.
-
