@@ -27,7 +27,11 @@ def download_location_data():
         with httpx.Client(follow_redirects=True, timeout=120) as client:
             for filename, config in files.items():
                 raw_path = data_dir / filename
-                path = raw_path.with_suffix(raw_path.suffix + ".gz") if config["gzip"] else raw_path
+                path = (
+                    raw_path.with_suffix(raw_path.suffix + ".gz")
+                    if config["gzip"]
+                    else raw_path
+                )
 
                 print(f"Downloading {filename}...")
 
