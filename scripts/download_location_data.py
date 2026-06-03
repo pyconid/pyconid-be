@@ -1,6 +1,6 @@
 from pathlib import Path
+import gzip
 import httpx
-import json
 
 
 def download_location_data():
@@ -9,33 +9,48 @@ def download_location_data():
     data_dir.mkdir(parents=True, exist_ok=True)
 
     files = {
-        "countries.json": f"{base_url}/countries.json",
-        "states.json": f"{base_url}/states.json",
-        "cities.json.gz": f"{base_url}/cities.json.gz",
+        "countries.json": {
+            "url": f"{base_url}/countries.json",
+            "gzip": False,
+        },
+        "states.json": {
+            "url": f"{base_url}/states.json",
+            "gzip": False,
+        },
+        "countries+states+cities.json": {
+            "url": f"{base_url}/countries+states+cities.json",
+            "gzip": True,
+        },
     }
 
     try:
         with httpx.Client(follow_redirects=True, timeout=120) as client:
-            for filename, url in files.items():
-                path = data_dir / filename
+            for filename, config in files.items():
+                raw_path = data_dir / filename
+                path = (
+                    raw_path.with_suffix(raw_path.suffix + ".gz")
+                    if config["gzip"]
+                    else raw_path
+                )
+
                 print(f"Downloading {filename}...")
 
-                if filename.endswith(".gz"):
-                    with client.stream("GET", url) as r:
-                        r.raise_for_status()
+                with client.stream("GET", config["url"]) as r:
+                    r.raise_for_status()
+                    if config["gzip"]:
+                        with gzip.open(path, "wb") as f:
+                            for chunk in r.iter_bytes():
+                                f.write(chunk)
+                    else:
                         with open(path, "wb") as f:
                             for chunk in r.iter_bytes():
                                 f.write(chunk)
 
-                    size_mb = path.stat().st_size / (1024 * 1024)
-                    print(f"{filename} downloaded (compressed ~{size_mb:.1f} MB)")
-                else:
-                    r = client.get(url)
-                    r.raise_for_status()
-                    data = r.json()
-                    with open(path, "w", encoding="utf-8") as f:
-                        json.dump(data, f, ensure_ascii=False, indent=2)
-                    print(f"{filename} downloaded ({len(data)} records)")
+                if config["gzip"] and raw_path.exists():
+                    raw_path.unlink()
+
+                size_mb = path.stat().st_size / (1024 * 1024)
+                print(f"{path.name} downloaded (~{size_mb:.1f} MB)")
 
         print("\nAll location data downloaded successfully!")
         print(f"Files saved in: {data_dir}/")
