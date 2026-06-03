@@ -199,6 +199,8 @@ class TestUserProfile(IsolatedAsyncioTestCase):
                 "share_my_job_and_company": True,
                 "share_my_interest": True,
                 "share_my_public_social_media": True,
+                "share_my_data_to_sponsor": True,
+                "retain_my_data_for_next_pycon": True,
             },
         )
 
@@ -211,6 +213,8 @@ class TestUserProfile(IsolatedAsyncioTestCase):
         self.assertEqual(new_user.share_my_job_and_company, True)
         self.assertEqual(new_user.share_my_interest, True)
         self.assertEqual(new_user.share_my_public_social_media, True)
+        self.assertEqual(new_user.share_my_data_to_sponsor, True)
+        self.assertEqual(new_user.retain_my_data_for_next_pycon, True)
 
         # When 2
         response = client.put(
@@ -241,6 +245,8 @@ class TestUserProfile(IsolatedAsyncioTestCase):
                 "share_my_job_and_company": True,
                 "share_my_interest": True,
                 "share_my_public_social_media": True,
+                "share_my_data_to_sponsor": True,
+                "retain_my_data_for_next_pycon": True,
             },
         )
 
@@ -320,6 +326,8 @@ class TestUserProfile(IsolatedAsyncioTestCase):
         self.assertIn("share_my_location", response.json())
         self.assertIn("share_my_interest", response.json())
         self.assertIn("share_my_public_social_media", response.json())
+        self.assertIn("share_my_data_to_sponsor", response.json())
+        self.assertIn("retain_my_data_for_next_pycon", response.json())
 
     async def test_update_profile_with_valid_location(self):
         """Test update user profile dengan location hierarchy yang valid"""
