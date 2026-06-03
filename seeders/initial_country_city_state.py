@@ -29,6 +29,35 @@ def load_json_maybe_gz(path_without_ext: str):
         )
 
 
+def flatten_cities(countries_with_states: list[dict]):
+    cities = []
+
+    for country_data in countries_with_states:
+        country_id = country_data.get("id")
+        country_code = country_data.get("iso2")
+
+        for state_data in country_data.get("states", []):
+            state_id = state_data.get("id")
+            state_code = state_data.get("iso2")
+
+            for city_data in state_data.get("cities", []):
+                cities.append(
+                    {
+                        "id": city_data.get("id"),
+                        "name": city_data.get("name"),
+                        "state_id": state_id,
+                        "state_code": state_code,
+                        "country_id": country_id,
+                        "country_code": country_code,
+                        "latitude": city_data.get("latitude"),
+                        "longitude": city_data.get("longitude"),
+                        "wikiDataId": city_data.get("wikiDataId"),
+                    }
+                )
+
+    return cities
+
+
 def initial_country_city_state_seeders(db: Session, is_commit: bool = True):
     data_dir = "seeders/data/location"
 
@@ -43,8 +72,11 @@ def initial_country_city_state_seeders(db: Session, is_commit: bool = True):
     print("Loading states...")
     states_data = load_json_maybe_gz(f"{data_dir}/states.json")
 
-    print("Loading cities...")
-    cities_data = load_json_maybe_gz(f"{data_dir}/cities.json")
+    print("Loading countries with states and cities...")
+    countries_with_states_cities = load_json_maybe_gz(
+        f"{data_dir}/countries+states+cities.json"
+    )
+    cities_data = flatten_cities(countries_with_states_cities)
 
     print("\nData Summary:")
     print(f" - Countries: {len(countries_data)}")
@@ -60,7 +92,7 @@ def initial_country_city_state_seeders(db: Session, is_commit: bool = True):
             iso3=country_data.get("iso3"),
             iso2=country_data.get("iso2"),
             numeric_code=country_data.get("numeric_code"),
-            phone_code=country_data.get("phone_code"),
+            phone_code=country_data.get("phonecode") or country_data.get("phone_code"),
             capital=country_data.get("capital"),
             currency=country_data.get("currency"),
             currency_name=country_data.get("currency_name"),
