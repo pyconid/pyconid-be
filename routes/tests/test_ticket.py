@@ -86,11 +86,10 @@ class TestTicket(TestCase):
         assert response.status_code == 200
         data = response.json()
         assert "results" in data
-        assert any(
-            t["name"] == "Test Ticket"
-            and t.get("description") == "Ini deskripsi test ticket"
-            for t in data["results"]
-        )
+        ordered_ticket = self.session.query(Ticket).order_by(Ticket.order.asc()).all()
+        ordered_ticket = [x.name for x in ordered_ticket]
+        ordered_result = [x["name"] for x in data["results"]]
+        self.assertListEqual(ordered_result, ordered_ticket)
 
     def test_get_my_ticket_without_payment(self):
         response = self.client.get(
