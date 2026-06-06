@@ -6,6 +6,8 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
+from opentelemetry import trace
+
 _REDACTION_PATTERNS = (
     re.compile(
         r"(?i)(authorization|x-callback-token|mux-signature)"
@@ -47,6 +49,15 @@ def _replace_sensitive_match(match: re.Match[str]) -> str:
 
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
+        trace_id = getattr(record, "otelTraceID", "0")
+        span_id = getattr(record, "otelSpanID", "0")
+
+        if trace_id == "0":
+            span_context = trace.get_current_span().get_span_context()
+            if span_context.is_valid:
+                trace_id = format(span_context.trace_id, "032x")
+                span_id = format(span_context.span_id, "016x")
+
         payload: dict[str, Any] = {
             "timestamp": datetime.fromtimestamp(
                 record.created, timezone.utc
@@ -54,8 +65,8 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "message": _redact_sensitive(record.getMessage()),
             "logger": record.name,
-            "trace_id": getattr(record, "otelTraceID", "0"),
-            "span_id": getattr(record, "otelSpanID", "0"),
+            "trace_id": trace_id,
+            "span_id": span_id,
             "service": getattr(
                 record,
                 "otelServiceName",
@@ -97,7 +108,7 @@ def configure_logging() -> None:
                 },
                 "uvicorn.access": {
                     "handlers": ["console"],
-                    "level": log_level,
+                    "level": "WARNING",
                     "propagate": False,
                 },
             },

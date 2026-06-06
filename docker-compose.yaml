@@ -25,7 +25,7 @@ services:
         max-file: "3"
 
   otel_collector:
-    image: otel/opentelemetry-collector-contrib:latest
+    image: otel/opentelemetry-collector-contrib:0.153.0
     container_name: otel_collector
     restart: always
     command: ["--config=/conf/otel-collector-config.yaml"]
