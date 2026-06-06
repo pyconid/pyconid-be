@@ -24,6 +24,26 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  otel_collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel_collector
+    restart: always
+    command: ["--config=/conf/otel-collector-config.yaml"]
+    env_file:
+      - ./.env
+    environment:
+      - DD_API_KEY=${DD_API_KEY}
+      - DD_SITE=${DD_SITE:-datadoghq.com}
+    volumes:
+      - ./otel-collector-config.yaml:/conf/otel-collector-config.yaml:ro
+    networks:
+      - ${NETWORK_NAME}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 networks:
   pycon_project:
     external: ${USE_EXTERNAL_NETWORK}
