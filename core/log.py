@@ -49,8 +49,12 @@ def _replace_sensitive_match(match: re.Match[str]) -> str:
 
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
-        trace_id = getattr(record, "otelTraceID", "0")
-        span_id = getattr(record, "otelSpanID", "0")
+        trace_id = getattr(record, "requestTraceID", None) or getattr(
+            record, "otelTraceID", "0"
+        )
+        span_id = getattr(record, "requestSpanID", None) or getattr(
+            record, "otelSpanID", "0"
+        )
 
         if trace_id == "0":
             span_context = trace.get_current_span().get_span_context()

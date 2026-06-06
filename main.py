@@ -3,6 +3,7 @@ import time
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from pydantic import ValidationError
 
@@ -32,12 +33,22 @@ async def request_logging_middleware(request: Request, call_next):
     start = time.perf_counter()
     response = await call_next(request)
     duration_ms = (time.perf_counter() - start) * 1000
+
+    span_context = trace.get_current_span().get_span_context()
+    log_extra = {}
+    if span_context.is_valid:
+        log_extra = {
+            "requestTraceID": format(span_context.trace_id, "032x"),
+            "requestSpanID": format(span_context.span_id, "016x"),
+        }
+
     logger.info(
         "%s %s %d %.2fms",
         request.method,
         request.url.path,
         response.status_code,
         duration_ms,
+        extra=log_extra,
     )
     return response
 
