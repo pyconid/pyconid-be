@@ -48,35 +48,79 @@ def _replace_sensitive_match(match: re.Match[str]) -> str:
 
 
 class JsonFormatter(logging.Formatter):
+    """JSON log formatter with optional Datadog-compatible field names.
+
+    When ``DD_ENABLED=true``, outputs ``dd.trace_id`` and ``dd.span_id``
+    as **decimal** strings (lower 64-bit of the 128-bit OTel trace-id)
+    so that Datadog Agent can correlate logs ↔ APM traces automatically.
+
+    When ``DD_ENABLED=false`` (default), outputs standard ``trace_id``
+    and ``span_id`` in hex format for generic OTel-compatible backends.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._dd_enabled = os.environ.get("DD_ENABLED", "false").lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+
+    @staticmethod
+    def _hex_to_dd_trace_id(hex_trace_id: str) -> str:
+        """Convert a 128-bit hex trace-id to Datadog's 64-bit decimal."""
+        try:
+            return str(int(hex_trace_id[-16:], 16))
+        except (ValueError, IndexError):
+            return "0"
+
+    @staticmethod
+    def _hex_to_dd_span_id(hex_span_id: str) -> str:
+        """Convert a hex span-id to Datadog's decimal format."""
+        try:
+            return str(int(hex_span_id, 16))
+        except (ValueError, IndexError):
+            return "0"
+
     def format(self, record: logging.LogRecord) -> str:
-        trace_id = getattr(record, "requestTraceID", None) or getattr(
+        hex_trace_id = getattr(record, "requestTraceID", None) or getattr(
             record, "otelTraceID", "0"
         )
-        span_id = getattr(record, "requestSpanID", None) or getattr(
+        hex_span_id = getattr(record, "requestSpanID", None) or getattr(
             record, "otelSpanID", "0"
         )
 
-        if trace_id == "0":
+        if hex_trace_id == "0":
             span_context = trace.get_current_span().get_span_context()
             if span_context.is_valid:
-                trace_id = format(span_context.trace_id, "032x")
-                span_id = format(span_context.span_id, "016x")
+                hex_trace_id = format(span_context.trace_id, "032x")
+                hex_span_id = format(span_context.span_id, "016x")
 
         payload: dict[str, Any] = {
             "timestamp": datetime.fromtimestamp(
                 record.created, timezone.utc
             ).isoformat(),
-            "level": record.levelname,
+            "status": record.levelname,
             "message": _redact_sensitive(record.getMessage()),
-            "logger": record.name,
-            "trace_id": trace_id,
-            "span_id": span_id,
+            "logger.name": record.name,
             "service": getattr(
                 record,
                 "otelServiceName",
                 os.environ.get("OTEL_SERVICE_NAME", "pyconid25-be"),
             ),
         }
+
+        if self._dd_enabled:
+            payload["dd.trace_id"] = self._hex_to_dd_trace_id(hex_trace_id)
+            payload["dd.span_id"] = self._hex_to_dd_span_id(hex_span_id)
+            payload["dd.env"] = os.environ.get(
+                "DD_ENV", os.environ.get("ENVIRONTMENT", "")
+            )
+        else:
+            payload["trace_id"] = hex_trace_id
+            payload["span_id"] = hex_span_id
+
         if record.exc_info:
             payload["exception"] = _redact_sensitive(
                 self.formatException(record.exc_info)
