@@ -90,17 +90,13 @@ class MayarService:
                     timeout=30.0,
                 )
                 response.raise_for_status()
-                print(response.status_code)
                 result = response.json()
-                print(
-                    f"Mayar create payment response: status:{response.status_code} {result}"
+                logger.info(
+                    f"Payment created successfully in Mayar with status {response.status_code}"
                 )
-                logger.info(f"Payment created successfully: {result}")
                 return result
         except httpx.HTTPStatusError as e:
-            logger.error(
-                f"Mayar API returned error {e.response.status_code}: {e.response.text}"
-            )
+            logger.error(f"Mayar API returned error {e.response.status_code}")
             logger.debug(f"Request URL: {e.request.url}")
             raise
         except httpx.RequestError as e:
@@ -136,12 +132,12 @@ class MayarService:
                 response.raise_for_status()
                 result = response.json()
 
-                logger.info(f"Payment status retrieved: {result}")
+                logger.info(
+                    f"Payment status retrieved from Mayar for payment {payment_id}"
+                )
                 return result
         except httpx.HTTPStatusError as e:
-            logger.error(
-                f"Mayar API returned error {e.response.status_code}: {e.response.text}"
-            )
+            logger.error(f"Mayar API returned error {e.response.status_code}")
             logger.debug(f"Request URL: {e.request.url}")
             raise
         except httpx.RequestError as e:
@@ -184,15 +180,11 @@ class MayarService:
                 if result.get("messages") == "success":
                     logger.info(f"Payment {payment_id} closed successfully on Mayar")
                 else:
-                    logger.warning(
-                        f"Failed to close payment {payment_id} on Mayar: {result}"
-                    )
+                    logger.warning(f"Failed to close payment {payment_id} on Mayar")
 
                 return result
         except httpx.HTTPStatusError as e:
-            logger.error(
-                f"Mayar API returned error {e.response.status_code}: {e.response.text}"
-            )
+            logger.error(f"Mayar API returned error {e.response.status_code}")
             logger.debug(f"Request URL: {e.request.url}")
             raise
         except httpx.RequestError as e:

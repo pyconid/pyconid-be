@@ -1,26 +1,13 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from pydantic import ValidationError
+
 from core.health_check import health_check
 from core.log import logger
 from core.rate_limiter.memory import InMemoryRateLimiter
 from core.rate_limiter.middleware import RateLimitMiddleware
-from routes.auth import router as auth_router
-from routes.user_profile import router as user_profile_router
-from routes.locations import router as locations_router
-from routes.ticket import router as ticket_router
-from routes.room import router as room_router
-from routes.schedule import router as schedule_router
-from routes.speaker import router as speaker_router
-from routes.payment import router as payment_router
-from routes.streaming import router as streaming_router
-from routes.voucher import router as voucher_router
-from routes.speaker_type import router as speaker_type_router
-from routes.organizer_type import router as organizer_type_router
-from routes.organizer import router as organizer_router
-from routes.schedule_type import router as schedule_type_router
-from routes.volunteer import router as volunteer_router
 
 from settings import (
     RATE_LIMIT_ENABLED,
@@ -28,6 +15,10 @@ from settings import (
     RATE_LIMIT_PER_MINUTE,
     RATE_LIMIT_WINDOW,
 )
+
+from core.telemetry import setup_telemetry
+
+otel_enabled = setup_telemetry()
 
 health_check()
 
@@ -49,6 +40,25 @@ app.add_middleware(
     window=RATE_LIMIT_WINDOW,
     exclude_paths=RATE_LIMIT_EXCLUDED_PATHS,
 )
+
+if otel_enabled:
+    FastAPIInstrumentor.instrument_app(app)
+
+from routes.auth import router as auth_router  # noqa: E402
+from routes.locations import router as locations_router  # noqa: E402
+from routes.organizer import router as organizer_router  # noqa: E402
+from routes.organizer_type import router as organizer_type_router  # noqa: E402
+from routes.payment import router as payment_router  # noqa: E402
+from routes.room import router as room_router  # noqa: E402
+from routes.schedule import router as schedule_router  # noqa: E402
+from routes.schedule_type import router as schedule_type_router  # noqa: E402
+from routes.speaker import router as speaker_router  # noqa: E402
+from routes.speaker_type import router as speaker_type_router  # noqa: E402
+from routes.streaming import router as streaming_router  # noqa: E402
+from routes.ticket import router as ticket_router  # noqa: E402
+from routes.user_profile import router as user_profile_router  # noqa: E402
+from routes.volunteer import router as volunteer_router  # noqa: E402
+from routes.voucher import router as voucher_router  # noqa: E402
 
 app.include_router(auth_router)
 app.include_router(user_profile_router)

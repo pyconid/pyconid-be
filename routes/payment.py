@@ -2,10 +2,17 @@ import traceback
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header
+from opentelemetry import trace
 from sqlalchemy.orm import Session
 
 from core.log import logger
 from core.mayar_service import MayarService
+from core.otel_metrics import (
+    payment_created_counter,
+    payment_status_counter,
+    payment_webhook_counter,
+)
+from core.telemetry import amount_bucket, get_tracer
 from core.responses import (
     BadRequest,
     Forbidden,
@@ -61,6 +68,8 @@ from settings import (
 
 router = APIRouter(prefix="/payment", tags=["Payment"])
 
+tracer = get_tracer("payment")
+
 
 async def close_unpaid_payments_with_mayar(
     db: Session,
@@ -68,33 +77,35 @@ async def close_unpaid_payments_with_mayar(
     exclude_payment_id: str,
     mayar_service: MayarService,
 ) -> int:
-    payments_to_close = paymentRepo.get_payments_by_user_id(
-        db=db,
-        user_id=user_id,
-        status=PaymentStatus.UNPAID,
-        exclude_payment_id=exclude_payment_id,
-    )
-
-    closed_count = 0
-    for payment in payments_to_close:
-        if payment.mayar_id:
-            try:
-                await mayar_service.close_payment(payment_id=payment.mayar_id)
-                logger.info(
-                    f"Closed payment {payment.id} in Mayar (mayar_id: {payment.mayar_id})"
-                )
-            except Exception as e:
-                logger.error(f"Failed to close payment {payment.id} in Mayar: {e}")
-
-        paymentRepo.update_payment(
+    with tracer.start_as_current_span("payment.close_unpaid_batch") as span:
+        payments_to_close = paymentRepo.get_payments_by_user_id(
             db=db,
-            payment=payment,
-            status=PaymentStatus.CLOSED,
-            is_commit=False,
+            user_id=user_id,
+            status=PaymentStatus.UNPAID,
+            exclude_payment_id=exclude_payment_id,
         )
-        closed_count += 1
 
-    return closed_count
+        closed_count = 0
+        for payment in payments_to_close:
+            if payment.mayar_id:
+                try:
+                    await mayar_service.close_payment(payment_id=payment.mayar_id)
+                    logger.info(
+                        f"Closed payment {payment.id} in Mayar (mayar_id: {payment.mayar_id})"
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to close payment {payment.id} in Mayar: {e}")
+
+            paymentRepo.update_payment(
+                db=db,
+                payment=payment,
+                status=PaymentStatus.CLOSED,
+                is_commit=False,
+            )
+            closed_count += 1
+
+        span.set_attribute("payment.close_count", closed_count)
+        return closed_count
 
 
 @router.get(
@@ -181,6 +192,9 @@ async def create_payment(
     db: Session = Depends(get_db_sync),
     token: str = Depends(oauth2_scheme),
 ):
+    span = tracer.start_span("payment.create")
+    span_context = trace.use_span(span, end_on_exit=True)
+    span_context.__enter__()
     try:
         user = get_user_from_token(db=db, token=token)
         if user is None:
@@ -251,6 +265,10 @@ async def create_payment(
             voucher_id=str(voucher.id) if voucher else None,
             is_commit=False,
         )
+        span.set_attribute("payment.id", str(payment.id))
+        span.set_attribute("ticket.id", str(ticket.id))
+        span.set_attribute("payment.amount_bucket", amount_bucket(amount))
+        span.set_attribute("payment.has_voucher", voucher is not None)
 
         if amount <= 0:
             user.participant_type = (
@@ -265,6 +283,14 @@ async def create_payment(
             db.commit()
             db.refresh(payment)
 
+            span.set_attribute("payment.status", str(payment.status))
+            payment_created_counter.add(
+                1,
+                {
+                    "ticket.name": ticket.name,
+                    "has_voucher": str(voucher is not None),
+                },
+            )
             return common_response(
                 Ok(
                     data=CreatePaymentResponse(
@@ -298,14 +324,15 @@ async def create_payment(
                     f"{user.first_name or ''} {user.last_name or ''}".strip()
                 )
 
-            mayar_response = await mayar_service.create_payment(
-                ticket=ticket,
-                customer_email=user.email,
-                customer_name=customer_name,
-                customer_phone=user.phone,
-                tx_internal_id=str(payment.id),
-                voucher=voucher,
-            )
+            with tracer.start_as_current_span("mayar.create_payment"):
+                mayar_response = await mayar_service.create_payment(
+                    ticket=ticket,
+                    customer_email=user.email,
+                    customer_name=customer_name,
+                    customer_phone=user.phone,
+                    tx_internal_id=str(payment.id),
+                    voucher=voucher,
+                )
 
             data = mayar_response.get("data", {})
             payment_link = data.get("link", "")
@@ -331,6 +358,14 @@ async def create_payment(
         db.commit()
         db.refresh(payment)
 
+        span.set_attribute("payment.status", str(payment.status))
+        payment_created_counter.add(
+            1,
+            {
+                "ticket.name": ticket.name,
+                "has_voucher": str(voucher is not None),
+            },
+        )
         return common_response(
             Ok(
                 data=CreatePaymentResponse(
@@ -359,6 +394,8 @@ async def create_payment(
         traceback.print_exc()
         logger.error(f"Error in create_payment: {e}")
         return common_response(InternalServerError(error="Internal Server Error"))
+    finally:
+        span_context.__exit__(None, None, None)
 
 
 @router.get(
@@ -478,9 +515,10 @@ async def get_payment_detail(
         mayar_service = MayarService(api_key=MAYAR_API_KEY, base_url=MAYAR_BASE_URL)
         try:
             if payment.mayar_id and payment.status == PaymentStatus.UNPAID:
-                mayar_status_response = await mayar_service.get_payment_status(
-                    payment_id=payment.mayar_id
-                )
+                with tracer.start_as_current_span("mayar.get_payment_status"):
+                    mayar_status_response = await mayar_service.get_payment_status(
+                        payment_id=payment.mayar_id
+                    )
                 data = mayar_status_response.get("data", {})
                 transaction_status = data.get("status", "").lower()
 
@@ -603,69 +641,85 @@ async def payment_webhook(
         event = request.get("event")
         data = request.get("data", {})
         if event == "payment.received" and data:
-            mayar_id = data.get("id")
-            mayar_transaction_id = data.get("transactionId")
-            transaction_status = data.get("status", "").lower()
+            with tracer.start_as_current_span("payment.webhook") as webhook_span:
+                payment_webhook_counter.add(1, {"event": event})
+                webhook_span.set_attribute("webhook.event", event)
+                mayar_id = data.get("id")
+                mayar_transaction_id = data.get("transactionId")
+                transaction_status = data.get("status", "").lower()
 
-            if not mayar_id and not mayar_transaction_id:
-                return common_response(
-                    BadRequest(message="id or transactionId is required")
-                )
-
-            status_mapping = {"success": PaymentStatus.PAID}
-
-            status = status_mapping.get(transaction_status, PaymentStatus.UNPAID)
-
-            payment = None
-            if mayar_transaction_id:
-                payment = paymentRepo.get_payment_by_mayar_transaction_id(
-                    db=db, mayar_transaction_id=mayar_transaction_id
-                )
-
-            if not payment and mayar_id:
-                payment = paymentRepo.get_payment_by_mayar_id(db=db, mayar_id=mayar_id)
-
-            if not payment:
-                logger.warning(
-                    f"Payment not found for mayar_id: {mayar_id}, transactionId: {mayar_transaction_id}"
-                )
-                return common_response(BadRequest(message="Payment not found"))
-
-            paymentRepo.update_payment(
-                db=db,
-                payment=payment,
-                status=status,
-                mayar_id=mayar_id,
-                mayar_transaction_id=mayar_transaction_id,
-                is_commit=False,
-            )
-            user: UserModel = payment.user
-            ticket: TicketModel = payment.ticket
-            voucher: VoucherModel = payment.voucher
-
-            if status == PaymentStatus.PAID:
-                if voucher and voucher.type:
-                    user.participant_type = voucher.type
-                else:
-                    user.participant_type = ticket.user_participant_type
-                db.add(user)
-
-                mayar_service = MayarService(
-                    api_key=MAYAR_API_KEY, base_url=MAYAR_BASE_URL
-                )
-                closed_count = await close_unpaid_payments_with_mayar(
-                    db=db,
-                    user_id=str(user.id),
-                    exclude_payment_id=str(payment.id),
-                    mayar_service=mayar_service,
-                )
-                if closed_count > 0:
-                    logger.info(
-                        f"Closed {closed_count} other unpaid payment(s) for user {user.id}"
+                if not mayar_id and not mayar_transaction_id:
+                    return common_response(
+                        BadRequest(message="id or transactionId is required")
                     )
 
-            db.commit()
-            logger.info(f"Payment {payment.id} updated to status {status} via webhook")
+                status_mapping = {"success": PaymentStatus.PAID}
+
+                status = status_mapping.get(transaction_status, PaymentStatus.UNPAID)
+
+                payment = None
+                if mayar_transaction_id:
+                    payment = paymentRepo.get_payment_by_mayar_transaction_id(
+                        db=db, mayar_transaction_id=mayar_transaction_id
+                    )
+
+                if not payment and mayar_id:
+                    payment = paymentRepo.get_payment_by_mayar_id(
+                        db=db, mayar_id=mayar_id
+                    )
+
+                if not payment:
+                    logger.warning(
+                        f"Payment not found for mayar_id: {mayar_id}, transactionId: {mayar_transaction_id}"
+                    )
+                    return common_response(BadRequest(message="Payment not found"))
+
+                status_before = str(payment.status)
+                webhook_span.set_attribute("payment.id", str(payment.id))
+                webhook_span.set_attribute("payment.status_before", status_before)
+
+                paymentRepo.update_payment(
+                    db=db,
+                    payment=payment,
+                    status=status,
+                    mayar_id=mayar_id,
+                    mayar_transaction_id=mayar_transaction_id,
+                    is_commit=False,
+                )
+                user: UserModel = payment.user
+                ticket: TicketModel = payment.ticket
+                voucher: VoucherModel = payment.voucher
+
+                if status == PaymentStatus.PAID:
+                    if voucher and voucher.type:
+                        user.participant_type = voucher.type
+                    else:
+                        user.participant_type = ticket.user_participant_type
+                    db.add(user)
+
+                    mayar_service = MayarService(
+                        api_key=MAYAR_API_KEY, base_url=MAYAR_BASE_URL
+                    )
+                    closed_count = await close_unpaid_payments_with_mayar(
+                        db=db,
+                        user_id=str(user.id),
+                        exclude_payment_id=str(payment.id),
+                        mayar_service=mayar_service,
+                    )
+                    if closed_count > 0:
+                        logger.info(
+                            f"Closed {closed_count} other unpaid payment(s) for user {user.id}"
+                        )
+
+                db.commit()
+                webhook_span.set_attribute("payment.status_after", str(status))
+                payment_status_counter.add(
+                    1,
+                    {"from_status": status_before, "to_status": str(status)},
+                )
+                logger.info(
+                    f"Payment {payment.id} updated to status {status} via webhook"
+                )
 
         return common_response(Ok(data={"message": "Webhook processed successfully"}))
     except Exception as e:

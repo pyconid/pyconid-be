@@ -93,6 +93,13 @@ STREAM_TOKEN_EXPIRE_MINUTES = int(
     os.environ.get("STREAM_TOKEN_EXPIRE_MINUTES", default="15")
 )
 
+# OpenTelemetry
+OTEL_ENABLED = str_to_bool(os.environ.get("OTEL_ENABLED", "False"))
+OTEL_SERVICE_NAME = os.environ.get("OTEL_SERVICE_NAME", "pyconid25-be")
+OTEL_EXPORTER_OTLP_ENDPOINT = os.environ.get(
+    "OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"
+)
+
 # File upload
 FILE_STORAGE_PATH = os.environ.get("FILE_STORAGE_PATH", "./storage")
 MAX_FILE_SIZE_MB = int(os.environ.get("MAX_FILE_SIZE_MB", "5"))
