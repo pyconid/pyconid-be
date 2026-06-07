@@ -1,7 +1,7 @@
 """create stream watch session table
 
 Revision ID: 80a7628ad31b
-Revises: 92f9a97e9001
+Revises: 620f0b3ec868
 Create Date: 2026-06-07 08:45:21.674891
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = "80a7628ad31b"
-down_revision: Union[str, None] = "92f9a97e9001"
+down_revision: Union[str, None] = "620f0b3ec868"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
