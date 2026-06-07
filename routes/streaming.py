@@ -21,14 +21,23 @@ from core.responses import (
 from core.security import get_user_from_token, oauth2_scheme
 from models import get_db_sync
 from models.Stream import StreamStatus
+from models.StreamWatchSession import WatchMode
 from repository import streaming as streamingRepo
+from repository import stream_watch as streamWatchRepo
 from schemas.common import (
     BadRequestResponse,
     InternalServerErrorResponse,
     NotFoundResponse,
+    UnauthorizedResponse,
 )
 from schemas.streaming import (
     PlaybackURLResponse,
+    WatchEndRequest,
+    WatchEndResponse,
+    WatchHeartbeatRequest,
+    WatchHeartbeatResponse,
+    WatchStartRequest,
+    WatchStartResponse,
 )
 from schemas.user_profile import ParticipantType
 from settings import TZ
@@ -236,4 +245,187 @@ async def mux_webhook(request: Request, db: Session = Depends(get_db_sync)):
     except HTTPException:
         raise
     except Exception as e:
+        return common_response(InternalServerError(error=str(e)))
+
+
+@router.post(
+    "/{stream_id}/watch/start",
+    responses={
+        "200": {"model": WatchStartResponse},
+        "400": {"model": BadRequestResponse},
+        "401": {"model": UnauthorizedResponse},
+        "404": {"model": NotFoundResponse},
+        "500": {"model": InternalServerErrorResponse},
+    },
+)
+async def watch_start(
+    stream_id: UUID,
+    body: WatchStartRequest,
+    request: Request,
+    db: Session = Depends(get_db_sync),
+    token: str = Depends(oauth2_scheme),
+):
+    try:
+        current_user = get_user_from_token(db=db, token=token)
+        if current_user is None:
+            return common_response(Unauthorized(message="Unauthorized"))
+
+        if (
+            current_user.participant_type is None
+            or current_user.participant_type == ParticipantType.NON_PARTICIPANT
+        ):
+            return common_response(
+                BadRequest(message="You must purchase a ticket to access this stream.")
+            )
+
+        stream_asset = streamingRepo.get_stream_by_id(db, stream_id)
+        if not stream_asset:
+            return common_response(NotFound(message="Stream not found"))
+        if stream_asset.schedule.deleted_at:
+            return common_response(NotFound(message="Stream not found"))
+
+        existing = streamWatchRepo.get_active_session(
+            db, current_user.id, stream_id, body.client_session_id
+        )
+        if existing:
+            return common_response(
+                Ok(
+                    data=WatchStartResponse(
+                        watch_session_id=str(existing.id),
+                        mode=existing.mode,
+                    ).model_dump(mode="json")
+                )
+            )
+
+        if stream_asset.status == StreamStatus.STREAMING.value:
+            mode = WatchMode.LIVE
+        elif stream_asset.status == StreamStatus.ENDED.value:
+            mode = WatchMode.REWATCH
+        else:
+            return common_response(BadRequest(message="Stream is not playable"))
+
+        user_agent = request.headers.get("user-agent")
+        session = streamWatchRepo.create_watch_session(
+            db=db,
+            stream_id=stream_id,
+            schedule_id=stream_asset.schedule_id,
+            user_id=current_user.id,
+            mode=mode,
+            client_session_id=body.client_session_id,
+            user_agent=user_agent,
+            position_seconds=body.position_seconds,
+        )
+
+        return common_response(
+            Ok(
+                data=WatchStartResponse(
+                    watch_session_id=str(session.id),
+                    mode=session.mode,
+                ).model_dump(mode="json")
+            )
+        )
+    except HTTPException as e:
+        return handle_http_exception(e)
+    except Exception as e:
+        traceback.print_exc()
+        return common_response(InternalServerError(error=str(e)))
+
+
+@router.post(
+    "/{stream_id}/watch/heartbeat",
+    responses={
+        "200": {"model": WatchHeartbeatResponse},
+        "400": {"model": BadRequestResponse},
+        "401": {"model": UnauthorizedResponse},
+        "404": {"model": NotFoundResponse},
+        "500": {"model": InternalServerErrorResponse},
+    },
+)
+async def watch_heartbeat(
+    stream_id: UUID,
+    body: WatchHeartbeatRequest,
+    db: Session = Depends(get_db_sync),
+    token: str = Depends(oauth2_scheme),
+):
+    try:
+        current_user = get_user_from_token(db=db, token=token)
+        if current_user is None:
+            return common_response(Unauthorized(message="Unauthorized"))
+
+        session = streamWatchRepo.get_watch_session(db, body.watch_session_id)
+        if not session:
+            return common_response(NotFound(message="Watch session not found"))
+        if str(session.user_id) != str(current_user.id):
+            return common_response(Unauthorized(message="Unauthorized"))
+        if str(session.stream_id) != str(stream_id):
+            return common_response(NotFound(message="Watch session not found"))
+        if session.client_session_id != body.client_session_id:
+            return common_response(Unauthorized(message="Unauthorized"))
+        if session.ended_at is not None:
+            return common_response(
+                BadRequest(message="Watch session has already ended")
+            )
+
+        streamWatchRepo.update_heartbeat(db, session, body.position_seconds)
+
+        return common_response(
+            Ok(
+                data=WatchHeartbeatResponse(
+                    watched_seconds=session.watched_seconds,
+                    qualified=session.qualified,
+                ).model_dump(mode="json")
+            )
+        )
+    except HTTPException as e:
+        return handle_http_exception(e)
+    except Exception as e:
+        traceback.print_exc()
+        return common_response(InternalServerError(error=str(e)))
+
+
+@router.post(
+    "/{stream_id}/watch/end",
+    responses={
+        "200": {"model": WatchEndResponse},
+        "400": {"model": BadRequestResponse},
+        "401": {"model": UnauthorizedResponse},
+        "404": {"model": NotFoundResponse},
+        "500": {"model": InternalServerErrorResponse},
+    },
+)
+async def watch_end(
+    stream_id: UUID,
+    body: WatchEndRequest,
+    db: Session = Depends(get_db_sync),
+    token: str = Depends(oauth2_scheme),
+):
+    try:
+        current_user = get_user_from_token(db=db, token=token)
+        if current_user is None:
+            return common_response(Unauthorized(message="Unauthorized"))
+
+        session = streamWatchRepo.get_watch_session(db, body.watch_session_id)
+        if not session:
+            return common_response(NotFound(message="Watch session not found"))
+        if str(session.user_id) != str(current_user.id):
+            return common_response(Unauthorized(message="Unauthorized"))
+        if str(session.stream_id) != str(stream_id):
+            return common_response(NotFound(message="Watch session not found"))
+        if session.client_session_id != body.client_session_id:
+            return common_response(Unauthorized(message="Unauthorized"))
+
+        streamWatchRepo.end_watch_session(db, session, body.position_seconds)
+
+        return common_response(
+            Ok(
+                data=WatchEndResponse(
+                    watched_seconds=session.watched_seconds,
+                    qualified=session.qualified,
+                ).model_dump(mode="json")
+            )
+        )
+    except HTTPException as e:
+        return handle_http_exception(e)
+    except Exception as e:
+        traceback.print_exc()
         return common_response(InternalServerError(error=str(e)))

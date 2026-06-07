@@ -15,6 +15,7 @@ from routes.schedule import router as schedule_router
 from routes.speaker import router as speaker_router
 from routes.payment import router as payment_router
 from routes.streaming import router as streaming_router
+from routes.admin_analytics import router as admin_analytics_router
 from routes.voucher import router as voucher_router
 from routes.speaker_type import router as speaker_type_router
 from routes.organizer_type import router as organizer_type_router
@@ -59,6 +60,7 @@ app.include_router(speaker_router)
 app.include_router(schedule_router)
 app.include_router(payment_router)
 app.include_router(streaming_router)
+app.include_router(admin_analytics_router)
 app.include_router(voucher_router)
 app.include_router(speaker_type_router)
 app.include_router(organizer_type_router)
