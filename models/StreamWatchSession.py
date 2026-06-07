@@ -1,6 +1,6 @@
 import enum
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import UUID, Boolean, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -73,7 +73,3 @@ class StreamWatchSession(Base):
     stream = relationship("Stream", backref="watch_sessions")
     schedule = relationship("Schedule", backref="watch_sessions")
     user = relationship("User", backref="watch_sessions")
-
-
-def now_utc() -> datetime:
-    return datetime.now(timezone.utc)

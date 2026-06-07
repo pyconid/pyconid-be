@@ -1,22 +1,24 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Optional, Union
 from uuid import UUID
 
+from pytz import timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from models.Stream import Stream
 from models.StreamWatchSession import StreamWatchSession, WatchMode
+from settings import TZ
 
 
-def now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+def now_tz() -> datetime:
+    return datetime.now(timezone(TZ))
 
 
 def ensure_aware(dt: datetime) -> datetime:
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt
+        return timezone(TZ).localize(dt)
+    return dt.astimezone(timezone(TZ))
 
 
 def create_watch_session(
@@ -29,7 +31,7 @@ def create_watch_session(
     user_agent: Optional[str] = None,
     position_seconds: Optional[float] = None,
 ) -> StreamWatchSession:
-    now = now_utc()
+    now = now_tz()
     session = StreamWatchSession(
         stream_id=stream_id,
         schedule_id=schedule_id,
@@ -83,7 +85,7 @@ def update_heartbeat(
     session: StreamWatchSession,
     position_seconds: float,
 ) -> None:
-    now = now_utc()
+    now = now_tz()
     previous_heartbeat = ensure_aware(session.last_heartbeat_at)
     server_delta = int((now - previous_heartbeat).total_seconds())
     position_delta = int(position_seconds - session.last_position_seconds)
@@ -110,7 +112,7 @@ def end_watch_session(
         return
     if position_seconds is not None:
         update_heartbeat(db, session, position_seconds)
-    now = now_utc()
+    now = now_tz()
     session.ended_at = now
     session.updated_at = now
     db.commit()
@@ -231,7 +233,7 @@ def get_watch_detail_by_stream(db: Session, stream_id: Union[UUID, str]) -> list
 
 
 def get_live_analytics_snapshot(db: Session) -> dict:
-    two_min_ago = now_utc() - timedelta(minutes=2)
+    two_min_ago = now_tz() - timedelta(minutes=2)
 
     active_sessions = (
         db.query(StreamWatchSession)
