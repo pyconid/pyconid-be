@@ -4,10 +4,13 @@ from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from opentelemetry import trace
 from pytz import timezone
 from sqlalchemy.orm import Session
 
 from core.log import logger
+from core.otel_metrics import streaming_webhook_counter
+from core.telemetry import get_tracer
 from core.mux_service import mux_service
 from core.responses import (
     BadRequest,
@@ -138,8 +141,12 @@ async def get_stream_playback(
         return common_response(InternalServerError(error=str(e)))
 
 
+tracer = get_tracer("streaming")
+
+
 @router.post("/webhook")
 async def mux_webhook(request: Request, db: Session = Depends(get_db_sync)):
+    stream_span = None
     try:
         payload = await request.body()
         signature = request.headers.get("Mux-Signature", "")
@@ -148,9 +155,17 @@ async def mux_webhook(request: Request, db: Session = Depends(get_db_sync)):
             return common_response(Unauthorized(message="Invalid webhook signature"))
 
         webhook_data = json.loads(payload)
-        logger.info(f"Webhook Mux Data: {webhook_data}")
         event_type = webhook_data.get("type")
         data = webhook_data.get("data", {})
+        logger.info(f"Mux webhook received: {event_type or 'unknown'}")
+
+        stream_id = data.get("id", "")
+        streaming_webhook_counter.add(1, {"event_type": event_type or "unknown"})
+        stream_span = tracer.start_span("streaming.webhook")
+        stream_context = trace.use_span(stream_span, end_on_exit=True)
+        stream_context.__enter__()
+        stream_span.set_attribute("webhook.event_type", event_type or "unknown")
+        stream_span.set_attribute("mux.stream_id", stream_id)
 
         if event_type == "video.asset.ready":
             asset_id = data.get("id")
@@ -237,3 +252,6 @@ async def mux_webhook(request: Request, db: Session = Depends(get_db_sync)):
         raise
     except Exception as e:
         return common_response(InternalServerError(error=str(e)))
+    finally:
+        if stream_span is not None:
+            stream_context.__exit__(None, None, None)
