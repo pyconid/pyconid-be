@@ -16,5 +16,10 @@ uv.lock
 storage/**
 !storage/.gitkeep
 
+# Generated location seed data
+seeders/data/location/*.json
+seeders/data/location/*.json.gz
+!seeders/data/location/.gitkeep
+
 
 .idea/
