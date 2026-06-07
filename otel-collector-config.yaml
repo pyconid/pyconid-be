@@ -1,0 +1,39 @@
+extensions:
+  health_check:
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+  batch:
+    send_batch_max_size: 100
+    send_batch_size: 10
+    timeout: 10s
+
+connectors:
+  datadog/connector:
+
+exporters:
+  datadog/exporter:
+    api:
+      site: ${env:DD_SITE:-datadoghq.com}
+      key: ${env:DD_API_KEY}
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [datadog/connector, datadog/exporter]
+    metrics:
+      receivers: [otlp, datadog/connector]
+      processors: [memory_limiter, batch]
+      exporters: [datadog/exporter]

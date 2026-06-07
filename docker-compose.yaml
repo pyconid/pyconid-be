@@ -12,6 +12,8 @@ services:
       - ./storage/:/app/storage/
     networks:
       - ${NETWORK_NAME}
+    labels:
+      com.datadoghq.ad.logs: '[{"source": "python", "service": "pyconid25-be"}]'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
