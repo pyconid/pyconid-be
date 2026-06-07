@@ -176,6 +176,65 @@ def get_analytics_by_stream(
     }
 
 
+def get_analytics_overall(
+    db: Session,
+    schedule_id: Optional[Union[UUID, str]] = None,
+    mode: Optional[WatchMode] = None,
+) -> dict:
+    filters = [StreamWatchSession.qualified.is_(True)]
+    if schedule_id:
+        filters.append(StreamWatchSession.schedule_id == schedule_id)
+    if mode:
+        filters.append(StreamWatchSession.mode == mode)
+
+    stats = (
+        db.query(
+            func.count(func.distinct(StreamWatchSession.user_id)).label(
+                "total_watchers"
+            ),
+            func.sum(StreamWatchSession.watched_seconds).label("total_watched_seconds"),
+        )
+        .filter(*filters)
+        .first()
+    )
+
+    live = 0
+    rewatch = 0
+    if mode in [None, WatchMode.LIVE]:
+        live_filters = [
+            StreamWatchSession.mode == WatchMode.LIVE,
+            StreamWatchSession.qualified.is_(True),
+        ]
+        if schedule_id:
+            live_filters.append(StreamWatchSession.schedule_id == schedule_id)
+        live = (
+            db.query(func.count(func.distinct(StreamWatchSession.user_id)))
+            .filter(*live_filters)
+            .scalar()
+            or 0
+        )
+    if mode in [None, WatchMode.REWATCH]:
+        rewatch_filters = [
+            StreamWatchSession.mode == WatchMode.REWATCH,
+            StreamWatchSession.qualified.is_(True),
+        ]
+        if schedule_id:
+            rewatch_filters.append(StreamWatchSession.schedule_id == schedule_id)
+        rewatch = (
+            db.query(func.count(func.distinct(StreamWatchSession.user_id)))
+            .filter(*rewatch_filters)
+            .scalar()
+            or 0
+        )
+
+    return {
+        "live_qualified_watchers": live,
+        "rewatch_qualified_watchers": rewatch,
+        "total_qualified_watchers": stats.total_watchers or 0,
+        "total_watched_minutes": int((stats.total_watched_seconds or 0) / 60),
+    }
+
+
 def get_analytics_all_streams(
     db: Session,
     schedule_id: Optional[Union[UUID, str]] = None,

@@ -77,14 +77,18 @@ def get_streaming_analytics_summary(
                     BadRequest(message="mode must be LIVE or REWATCH")
                 )
 
+        overall = streamWatchRepo.get_analytics_overall(
+            db=db, schedule_id=schedule_id, mode=watch_mode
+        )
         streams = streamWatchRepo.get_analytics_all_streams(
             db=db, schedule_id=schedule_id, mode=watch_mode
         )
         return common_response(
             Ok(
-                data=StreamAnalyticsSummaryResponse(streams=streams).model_dump(
-                    mode="json"
-                )
+                data=StreamAnalyticsSummaryResponse(
+                    overall=overall,
+                    streams=streams,
+                ).model_dump(mode="json")
             )
         )
     except Exception as e:
