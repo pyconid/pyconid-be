@@ -15,6 +15,7 @@ from models.ScheduleType import ScheduleType
 from models.Speaker import Speaker
 from models.SpeakerType import SpeakerType
 from models.Stream import Stream, StreamStatus
+from models.StreamWatchSession import StreamWatchSession, WatchMode
 from models.User import MANAGEMENT_PARTICIPANT, User
 from schemas.user_profile import ParticipantType
 
@@ -544,6 +545,142 @@ class TestStreaming(IsolatedAsyncioTestCase):
 
         # Expect
         self.assertEqual(response.status_code, 404)
+
+    async def test_get_streaming_analytics_summary_includes_overall(self):
+        # Given
+        user_participant_two = User(
+            username="participant_user_two",
+            participant_type=ParticipantType.ONLINE,
+        )
+        self.db.add(user_participant_two)
+
+        start_time = datetime.now() - timedelta(hours=2)
+        end_time = start_time + timedelta(hours=1)
+
+        schedule_one = Schedule(
+            title="First Stream Schedule",
+            speaker_id=self.speaker.id,
+            room_id=self.room.id,
+            schedule_type_id=self.schedule_type.id,
+            description="Test description",
+            presentation_language="English",
+            slide_language="English",
+            tags=["python"],
+            start=start_time,
+            end=end_time,
+        )
+        schedule_two = Schedule(
+            title="Second Stream Schedule",
+            speaker_id=self.speaker.id,
+            room_id=self.room.id,
+            schedule_type_id=self.schedule_type.id,
+            description="Test description",
+            presentation_language="English",
+            slide_language="English",
+            tags=["python"],
+            start=start_time,
+            end=end_time,
+        )
+        self.db.add(schedule_one)
+        self.db.add(schedule_two)
+        self.db.commit()
+
+        stream_one = Stream(
+            schedule_id=schedule_one.id,
+            is_public=True,
+            mux_live_stream_id="mux_stream_analytics_1",
+            mux_playback_id="playback_analytics_1",
+            mux_stream_key="stream_key_analytics_1",
+            status=StreamStatus.ENDED,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        stream_two = Stream(
+            schedule_id=schedule_two.id,
+            is_public=True,
+            mux_live_stream_id="mux_stream_analytics_2",
+            mux_playback_id="playback_analytics_2",
+            mux_stream_key="stream_key_analytics_2",
+            status=StreamStatus.STREAMING,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        self.db.add(stream_one)
+        self.db.add(stream_two)
+        self.db.commit()
+
+        now = datetime.now()
+        self.db.add_all(
+            [
+                StreamWatchSession(
+                    stream_id=stream_one.id,
+                    schedule_id=schedule_one.id,
+                    user_id=self.user_participant.id,
+                    mode=WatchMode.LIVE,
+                    started_at=now,
+                    last_heartbeat_at=now,
+                    ended_at=now,
+                    watched_seconds=120,
+                    last_position_seconds=120,
+                    qualified=True,
+                    client_session_id="analytics-live-1",
+                    created_at=now,
+                    updated_at=now,
+                ),
+                StreamWatchSession(
+                    stream_id=stream_two.id,
+                    schedule_id=schedule_two.id,
+                    user_id=user_participant_two.id,
+                    mode=WatchMode.REWATCH,
+                    started_at=now,
+                    last_heartbeat_at=now,
+                    ended_at=now,
+                    watched_seconds=180,
+                    last_position_seconds=180,
+                    qualified=True,
+                    client_session_id="analytics-rewatch-1",
+                    created_at=now,
+                    updated_at=now,
+                ),
+                StreamWatchSession(
+                    stream_id=stream_two.id,
+                    schedule_id=schedule_two.id,
+                    user_id=self.user_participant.id,
+                    mode=WatchMode.REWATCH,
+                    started_at=now,
+                    last_heartbeat_at=now,
+                    ended_at=now,
+                    watched_seconds=30,
+                    last_position_seconds=30,
+                    qualified=False,
+                    client_session_id="analytics-unqualified-1",
+                    created_at=now,
+                    updated_at=now,
+                ),
+            ]
+        )
+        self.db.commit()
+
+        token, _ = await generate_token_from_user(db=self.db, user=self.user_management)
+        app.dependency_overrides[get_db_sync] = get_db_sync_for_test(db=self.db)
+        client = TestClient(app)
+
+        # When
+        response = client.get(
+            "/admin/streaming/analytics/summary",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # Expect
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["overall"]["live_qualified_watchers"], 1)
+        self.assertEqual(data["overall"]["rewatch_qualified_watchers"], 1)
+        self.assertEqual(data["overall"]["total_qualified_watchers"], 2)
+        self.assertEqual(data["overall"]["total_watched_minutes"], 5)
+        self.assertGreaterEqual(len(data["streams"]), 2)
+        self.assertEqual(data["streams"][0]["stream_id"], str(stream_two.id))
+        self.assertEqual(data["streams"][0]["status"], StreamStatus.STREAMING.value)
 
     def tearDown(self) -> None:
         self.db.close()
