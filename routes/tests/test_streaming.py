@@ -601,7 +601,7 @@ class TestStreaming(IsolatedAsyncioTestCase):
             mux_live_stream_id="mux_stream_analytics_2",
             mux_playback_id="playback_analytics_2",
             mux_stream_key="stream_key_analytics_2",
-            status=StreamStatus.ENDED,
+            status=StreamStatus.STREAMING,
             created_at=datetime.now(),
             updated_at=datetime.now(),
         )
@@ -679,6 +679,8 @@ class TestStreaming(IsolatedAsyncioTestCase):
         self.assertEqual(data["overall"]["total_qualified_watchers"], 2)
         self.assertEqual(data["overall"]["total_watched_minutes"], 5)
         self.assertGreaterEqual(len(data["streams"]), 2)
+        self.assertEqual(data["streams"][0]["stream_id"], str(stream_two.id))
+        self.assertEqual(data["streams"][0]["status"], StreamStatus.STREAMING.value)
 
     def tearDown(self) -> None:
         self.db.close()

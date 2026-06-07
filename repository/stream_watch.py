@@ -3,10 +3,10 @@ from typing import Optional, Union
 from uuid import UUID
 
 from pytz import timezone
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
-from models.Stream import Stream
+from models.Stream import Stream, StreamStatus
 from models.StreamWatchSession import StreamWatchSession, WatchMode
 from settings import TZ
 
@@ -240,7 +240,10 @@ def get_analytics_all_streams(
     schedule_id: Optional[Union[UUID, str]] = None,
     mode: Optional[WatchMode] = None,
 ) -> list[dict]:
-    stmt = select(Stream)
+    stmt = select(Stream).order_by(
+        case((Stream.status == StreamStatus.STREAMING.value, 0), else_=1),
+        Stream.created_at.desc(),
+    )
     if schedule_id:
         stmt = stmt.where(Stream.schedule_id == schedule_id)
     streams = db.execute(stmt).scalars().all()
