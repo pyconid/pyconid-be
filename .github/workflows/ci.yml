@@ -160,24 +160,15 @@ jobs:
           target: /home/${{ secrets.DEV_SSH_USER }}/pyconid26-be-dev/
           overwrite: true
 
-      - name: SSH - Generate .env file dari secret
+      - name: SSH - Update Version and Deploy
         uses: appleboy/ssh-action@v1.0.3
-        env:
-          DEV_ENV_FILE: ${{ secrets.DEV_ENV_FILE }}
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
           port: ${{ secrets.DEV_SSH_PORT || '22' }}
           key: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
-          envs: DEV_ENV_FILE
           script: |
             cd ~/pyconid26-be-dev
-            
-            echo "$DEV_ENV_FILE" > .env
-            chmod 644 .env
-
-            mkdir -p storage
-            chmod 775 storage
 
             # Update IMAGE_TAG di .env sesuai version.txt
             VERSION=$(cat version.txt)
@@ -231,24 +222,15 @@ jobs:
           target: /home/${{ secrets.PROD_SSH_USER }}/pyconid26-be-prod/
           overwrite: true
 
-      - name: SSH - Generate .env file dari secret
+      - name: SSH - Update Version and Deploy
         uses: appleboy/ssh-action@v1.0.3
-        env:
-          PROD_ENV_FILE: ${{ secrets.PROD_ENV_FILE }}
         with:
           host: ${{ secrets.PROD_SSH_HOST }}
           username: ${{ secrets.PROD_SSH_USER }}
           port: ${{ secrets.PROD_SSH_PORT || '22' }}
           key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
-          envs: PROD_ENV_FILE
           script: |
             cd ~/pyconid26-be-prod
-            
-            echo "$PROD_ENV_FILE" > .env
-            chmod 644 .env
-
-            mkdir -p storage
-            chmod 775 storage
 
             VERSION=$(cat version.txt)
             if grep -q '^IMAGE_TAG=' .env; then
