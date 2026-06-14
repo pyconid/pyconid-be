@@ -6,7 +6,7 @@ Authlib==1.6.0
 bcrypt==4.3.0
 blinker==1.9.0
 certifi==2025.1.31
-cffi==1.17.1
+cffi==2.0.0
 charset-normalizer==3.4.3
 click==8.1.8
 cryptography==45.0.5
@@ -33,7 +33,7 @@ mdurl==0.1.2
 mux-python==5.1.0
 mypy==1.15.0
 mypy-extensions==1.0.0
-numpy==2.3.3
+numpy==1.26.4
 packaging==24.2
 pandas==2.3.3
 pgeocode==0.5.0
