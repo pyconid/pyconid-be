@@ -63,14 +63,14 @@ def get_watch_session(
 def get_active_session(
     db: Session,
     user_id: Union[UUID, str],
-    stream_id: Union[UUID, str],
+    schedule_id: Union[UUID, str],
     client_session_id: str,
 ) -> Optional[StreamWatchSession]:
     stmt = (
         select(StreamWatchSession)
         .where(
             StreamWatchSession.user_id == user_id,
-            StreamWatchSession.stream_id == stream_id,
+            StreamWatchSession.schedule_id == schedule_id,
             StreamWatchSession.client_session_id == client_session_id,
             StreamWatchSession.ended_at.is_(None),
         )
@@ -119,13 +119,13 @@ def end_watch_session(
     db.refresh(session)
 
 
-def get_analytics_by_stream(
+def get_analytics_by_schedule(
     db: Session,
-    stream_id: Union[UUID, str],
+    schedule_id: Union[UUID, str],
     mode: Optional[WatchMode] = None,
 ) -> dict:
     filters = [
-        StreamWatchSession.stream_id == stream_id,
+        StreamWatchSession.schedule_id == schedule_id,
         StreamWatchSession.qualified.is_(True),
     ]
     if mode:
@@ -148,7 +148,7 @@ def get_analytics_by_stream(
         live = (
             db.query(func.count(func.distinct(StreamWatchSession.user_id)))
             .filter(
-                StreamWatchSession.stream_id == stream_id,
+                StreamWatchSession.schedule_id == schedule_id,
                 StreamWatchSession.mode == WatchMode.LIVE,
                 StreamWatchSession.qualified.is_(True),
             )
@@ -159,7 +159,7 @@ def get_analytics_by_stream(
         rewatch = (
             db.query(func.count(func.distinct(StreamWatchSession.user_id)))
             .filter(
-                StreamWatchSession.stream_id == stream_id,
+                StreamWatchSession.schedule_id == schedule_id,
                 StreamWatchSession.mode == WatchMode.REWATCH,
                 StreamWatchSession.qualified.is_(True),
             )
@@ -168,7 +168,8 @@ def get_analytics_by_stream(
         )
 
     return {
-        "stream_id": str(stream_id),
+        "stream_id": str(schedule_id), # We don't have a specific stream_id for a schedule, but we need it for the response model
+        "schedule_id": str(schedule_id),
         "live_qualified_watchers": live,
         "rewatch_qualified_watchers": rewatch,
         "total_qualified_watchers": stats.total_watchers or 0,
@@ -250,9 +251,12 @@ def get_analytics_all_streams(
 
     data = []
     for stream in streams:
-        analytics = get_analytics_by_stream(db, stream.id, mode=mode)
+        if not stream.schedule_id:
+            continue
+        analytics = get_analytics_by_schedule(db, stream.schedule_id, mode=mode)
         analytics.update(
             {
+                "stream_id": str(stream.id),
                 "schedule_title": stream.schedule.title if stream.schedule else None,
                 "room": stream.schedule.room.name
                 if stream.schedule and stream.schedule.room
@@ -264,11 +268,11 @@ def get_analytics_all_streams(
     return data
 
 
-def get_watch_detail_by_stream(db: Session, stream_id: Union[UUID, str]) -> list[dict]:
+def get_watch_detail_by_schedule(db: Session, schedule_id: Union[UUID, str]) -> list[dict]:
     stmt = (
         select(StreamWatchSession)
         .where(
-            StreamWatchSession.stream_id == stream_id,
+            StreamWatchSession.schedule_id == schedule_id,
             StreamWatchSession.qualified.is_(True),
         )
         .order_by(StreamWatchSession.watched_seconds.desc())
@@ -312,6 +316,7 @@ def get_live_analytics_snapshot(db: Session) -> dict:
         if sid not in streams_data:
             streams_data[sid] = {
                 "stream_id": sid,
+                "schedule_id": str(s.schedule_id) if s.schedule_id else None,
                 "schedule_title": s.schedule.title if s.schedule else None,
                 "room": s.schedule.room.name
                 if s.schedule and s.schedule.room

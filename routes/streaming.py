@@ -122,6 +122,8 @@ async def get_stream_playback(
         return common_response(
             Ok(
                 data=PlaybackURLResponse(
+                    stream_id=str(stream_id),
+                    schedule_id=str(stream_asset.schedule_id),
                     playback=PlaybackURLResponse.Playback(
                         id=playback_id,
                         url=playback_url,
@@ -285,7 +287,7 @@ async def watch_start(
             return common_response(NotFound(message="Stream not found"))
 
         existing = streamWatchRepo.get_active_session(
-            db, current_user.id, stream_id, body.client_session_id
+            db, current_user.id, stream_asset.schedule_id, body.client_session_id
         )
         if existing:
             return common_response(

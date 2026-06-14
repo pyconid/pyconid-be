@@ -97,7 +97,7 @@ def get_streaming_analytics_summary(
 
 
 @router.get(
-    "/{stream_id}/detail",
+    "/{schedule_id}/detail",
     responses={
         "200": {"model": StreamAnalyticsDetailResponse},
         "401": {"model": UnauthorizedResponse},
@@ -106,7 +106,7 @@ def get_streaming_analytics_summary(
     },
 )
 def get_streaming_analytics_detail(
-    stream_id: UUID,
+    schedule_id: UUID,
     db: Session = Depends(get_db_sync),
     current_user: User | None = Depends(get_current_user),
 ):
@@ -115,12 +115,13 @@ def get_streaming_analytics_detail(
         return admin_error
 
     try:
-        analytics = streamWatchRepo.get_analytics_by_stream(db, stream_id)
-        watchers = streamWatchRepo.get_watch_detail_by_stream(db, stream_id)
+        analytics = streamWatchRepo.get_analytics_by_schedule(db, schedule_id)
+        watchers = streamWatchRepo.get_watch_detail_by_schedule(db, schedule_id)
         return common_response(
             Ok(
                 data=StreamAnalyticsDetailResponse(
-                    stream_id=str(stream_id),
+                    stream_id=analytics["stream_id"],
+                    schedule_id=str(schedule_id),
                     watchers=watchers,
                     live_qualified_watchers=analytics["live_qualified_watchers"],
                     rewatch_qualified_watchers=analytics["rewatch_qualified_watchers"],

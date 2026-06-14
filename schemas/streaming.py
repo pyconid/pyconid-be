@@ -8,6 +8,9 @@ from models.Stream import StreamStatus
 
 
 class PlaybackURLResponse(BaseModel):
+    stream_id: str
+    schedule_id: str
+
     class Playback(BaseModel):
         id: str
         url: str
@@ -70,6 +73,7 @@ class WatchEndResponse(BaseModel):
 
 class StreamAnalyticsItem(BaseModel):
     stream_id: str
+    schedule_id: str
     schedule_title: Optional[str] = None
     room: Optional[str] = None
     status: Optional[str] = None
@@ -92,6 +96,7 @@ class StreamAnalyticsSummaryResponse(BaseModel):
 
 
 class WatcherDetail(BaseModel):
+    client_session_id: str
     user_id: str
     email: Optional[str] = None
     name: Optional[str] = None
@@ -104,6 +109,7 @@ class WatcherDetail(BaseModel):
 
 class StreamAnalyticsDetailResponse(BaseModel):
     stream_id: str
+    schedule_id: str
     watchers: list[WatcherDetail]
     live_qualified_watchers: int = 0
     rewatch_qualified_watchers: int = 0
