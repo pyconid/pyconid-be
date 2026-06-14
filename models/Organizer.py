@@ -29,5 +29,5 @@ class Organizer(Base):
     )
     deleted_at = mapped_column("deleted_at", DateTime(timezone=True), nullable=True)
     # Relationships
-    user = relationship("User", backref="organizer_user")
+    user = relationship("User", back_populates="organizer")
     organizer_type = relationship("OrganizerType", backref="organizer_organizer_type")

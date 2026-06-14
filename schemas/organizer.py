@@ -145,3 +145,14 @@ def organizers_by_type_response_from_models(
         ),
         organizers=[organizer_detail_user_from_model(org) for org in organizers],
     )
+
+
+class OrganizerUserSchema(BaseModel):
+    class UserSchema(BaseModel):
+        id: str
+        username: Optional[str] = None
+        first_name: Optional[str] = None
+        last_name: Optional[str] = None
+        email: Optional[str] = None
+
+    results: list[UserSchema]

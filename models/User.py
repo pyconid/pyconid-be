@@ -139,6 +139,7 @@ class User(Base):
     # One to Many
     tokens = relationship("Token", back_populates="user")
     refresh_tokens = relationship("RefreshToken", back_populates="user")
+    organizer = relationship("Organizer", back_populates="user")
 
     # Many to One - Location relationships
     country = relationship("Country", back_populates="users")
