@@ -3,7 +3,7 @@ from typing import Optional, Union
 from uuid import UUID
 
 from pytz import timezone
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, update
 from sqlalchemy.orm import Session
 
 from models.Stream import Stream, StreamStatus
@@ -281,6 +281,7 @@ def get_watch_detail_by_schedule(db: Session, schedule_id: Union[UUID, str]) -> 
 
     return [
         {
+            "client_session_id": s.client_session_id,
             "user_id": str(s.user_id),
             "email": s.user.email if s.user else None,
             "name": (
@@ -296,6 +297,25 @@ def get_watch_detail_by_schedule(db: Session, schedule_id: Union[UUID, str]) -> 
         }
         for s in sessions
     ]
+
+
+def end_abandoned_sessions(db: Session, timeout_minutes: int = 5) -> int:
+    timeout_threshold = now_tz() - timedelta(minutes=timeout_minutes)
+
+    stmt = (
+        update(StreamWatchSession)
+        .where(
+            StreamWatchSession.ended_at.is_(None),
+            StreamWatchSession.last_heartbeat_at < timeout_threshold,
+        )
+        .values(
+            ended_at=StreamWatchSession.last_heartbeat_at,
+            updated_at=now_tz()
+        )
+    )
+    result = db.execute(stmt)
+    db.commit()
+    return result.rowcount
 
 
 def get_live_analytics_snapshot(db: Session) -> dict:

@@ -68,6 +68,8 @@ def get_streaming_analytics_summary(
         return admin_error
 
     try:
+        streamWatchRepo.end_abandoned_sessions(db)
+
         watch_mode = None
         if mode:
             try:
@@ -115,6 +117,8 @@ def get_streaming_analytics_detail(
         return admin_error
 
     try:
+        streamWatchRepo.end_abandoned_sessions(db)
+
         analytics = streamWatchRepo.get_analytics_by_schedule(db, schedule_id)
         watchers = streamWatchRepo.get_watch_detail_by_schedule(db, schedule_id)
         return common_response(
