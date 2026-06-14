@@ -11,6 +11,7 @@ from models.Organizer import Organizer
 from models.OrganizerType import OrganizerType
 from models.User import MANAGEMENT_PARTICIPANT, User
 from main import app
+from schemas.organizer import OrganizerUserSchema
 from settings import FILE_STORAGE_PATH
 
 
@@ -242,6 +243,117 @@ class TestOrganizer(IsolatedAsyncioTestCase):
 
         # Expect
         self.assertEqual(response.status_code, 400)
+
+    async def test_get_users_for_organizer(self):
+        # Given
+        user_management = User(
+            username="admin",
+            participant_type=MANAGEMENT_PARTICIPANT,
+            email="admin@pycon.id",
+        )
+        self.db.add(user_management)
+        user_non_management = User(
+            username="non_admin",
+            participant_type=None,
+            email="nonadmin@pycon.id",
+        )
+        self.db.add(user_non_management)
+
+        user_available_1 = User(
+            username="alice",
+            first_name="Alice",
+            last_name="Available",
+            email="alice@pycon.id",
+        )
+        self.db.add(user_available_1)
+        user_available_2 = User(
+            username="bob",
+            first_name="Bob",
+            last_name="Available",
+            email="bob@pycon.id",
+        )
+        self.db.add(user_available_2)
+
+        organizer_type = OrganizerType(name="Core Team")
+        self.db.add(organizer_type)
+
+        self.db.add(Organizer(user=user_management, organizer_type=organizer_type))
+        self.db.add(Organizer(user=user_non_management, organizer_type=organizer_type))
+        self.db.commit()
+
+        (management_token, _) = await generate_token_from_user(
+            db=self.db, user=user_management
+        )
+        app.dependency_overrides[get_db_sync] = get_db_sync_for_test(db=self.db)
+        client = TestClient(app)
+
+        # When 1 - Management user gets available users
+        # Only show user thats not already assign as organizer
+        response = client.get(
+            "/organizer/user/",
+            headers={"Authorization": f"Bearer {management_token}"},
+        )
+
+        # Expect 1
+        self.assertEqual(response.status_code, 200)
+        self.assertDictEqual(
+            response.json(),
+            OrganizerUserSchema(
+                results=[
+                    OrganizerUserSchema.UserSchema(
+                        id=str(user_available_1.id),
+                        username=user_available_1.username,
+                        first_name=user_available_1.first_name,
+                        last_name=user_available_1.last_name,
+                        email=user_available_1.email,
+                    ),
+                    OrganizerUserSchema.UserSchema(
+                        id=str(user_available_2.id),
+                        username=user_available_2.username,
+                        first_name=user_available_2.first_name,
+                        last_name=user_available_2.last_name,
+                        email=user_available_2.email,
+                    ),
+                ]
+            ).model_dump(),
+        )
+
+        # When 2 - Search by user identity
+        # Show searched user by user
+        response = client.get(
+            "/organizer/user/",
+            headers={"Authorization": f"Bearer {management_token}"},
+            params={"search": "bob"},
+        )
+
+        # Expect 2
+        self.assertEqual(response.status_code, 200)
+        self.assertDictEqual(
+            response.json(),
+            OrganizerUserSchema(
+                results=[
+                    OrganizerUserSchema.UserSchema(
+                        id=str(user_available_2.id),
+                        username=user_available_2.username,
+                        first_name=user_available_2.first_name,
+                        last_name=user_available_2.last_name,
+                        email=user_available_2.email,
+                    )
+                ]
+            ).model_dump(),
+        )
+
+        # When 3 - Non-management user cannot access
+        (non_management_token, _) = await generate_token_from_user(
+            db=self.db, user=user_available_1
+        )
+        response = client.get(
+            "/organizer/user/",
+            headers={"Authorization": f"Bearer {non_management_token}"},
+        )
+
+        # Expect 3
+        self.assertEqual(response.status_code, 403)
 
     async def test_update_organizer(self):
         # Given

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from core.file import get_file
@@ -29,7 +29,7 @@ from repository.organizer import (
     organizers_by_type_response_from_models,
 )
 from repository.organizer_type import get_organizer_type_by_id
-from repository.user import get_user_by_id
+from repository.user import get_all_user, get_user_by_id
 from schemas.auth import AuthorizationStatusEnum
 from schemas.organizer import (
     OrganizerCreateRequest,
@@ -43,6 +43,7 @@ from schemas.organizer import (
     OrganizersByType,
     OrganizerResponseItem,
     OrganizerDetailResponse,
+    OrganizerUserSchema,
 )
 from schemas.common import (
     InternalServerErrorResponse,
@@ -249,6 +250,52 @@ def create_organizer(
         )
     except Exception as e:
         logger.error(f"Error creating organizer: {e}")
+        return common_response(InternalServerError(error=str(e)))
+
+
+@router.get(
+    "/user/",
+    responses={
+        "200": {"model": OrganizerUserSchema},
+        "401": {"model": UnauthorizedResponse},
+        "403": {"model": ForbiddenResponse},
+        "500": {"model": InternalServerErrorResponse},
+    },
+)
+def get_users_for_organizer(
+    search: str | None = Query(
+        None, description="Search users by name, username, or email"
+    ),
+    db: Session = Depends(get_db_sync),
+    current_user: User | None = Depends(get_current_user),
+):
+    logger.info("Fetching users not assigned as organizer")
+    auth_status = check_permissions(current_user, MANAGEMENT_PARTICIPANT)
+    if auth_status == AuthorizationStatusEnum.UNAUTHORIZED:
+        return common_response(Unauthorized(message="Unauthorized"))
+    if auth_status == AuthorizationStatusEnum.FORBIDDEN:
+        return common_response(
+            Forbidden(custom_response="Forbidden: Insufficient permissions")
+        )
+
+    try:
+        users = get_all_user(db=db, search=search, is_organizer=False)
+        available_users = OrganizerUserSchema(
+            results=[
+                OrganizerUserSchema.UserSchema(
+                    id=str(user.id),
+                    username=user.username,
+                    first_name=user.first_name,
+                    last_name=user.last_name,
+                    email=user.email,
+                )
+                for user in users
+                if not user.organizer
+            ]
+        )
+        return common_response(Ok(data=available_users.model_dump()))
+    except Exception as e:
+        logger.error(f"Error fetching users for organizer: {e}")
         return common_response(InternalServerError(error=str(e)))
 
 

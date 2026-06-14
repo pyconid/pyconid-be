@@ -7,6 +7,7 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from models.Organizer import Organizer
 from models.User import VOLUNTEER_PARTICIPANT, User
 from models.Volunteer import Volunteer
 from schemas.user_profile import UserProfileDB
@@ -25,7 +26,10 @@ def get_user_by_email(db: Session, email: str) -> Optional[User]:
 
 
 def get_all_user(
-    db: Session, search: Optional[str] = None, paritcipant_type: Optional[str] = None
+    db: Session,
+    search: Optional[str] = None,
+    paritcipant_type: Optional[str] = None,
+    is_organizer: Optional[bool] = None,
 ) -> list[User]:
     stmt = select(User)
     if search:
@@ -38,6 +42,12 @@ def get_all_user(
         )
     if paritcipant_type:
         stmt = stmt.where(User.participant_type == paritcipant_type)
+
+    if is_organizer:
+        stmt = stmt.join(Organizer, User.organizer).where(
+            Organizer.user_id.is_not(None)
+        )
+
     stmt = stmt.order_by(User.email.asc())
     results = db.execute(stmt).scalars().all()
     return results
