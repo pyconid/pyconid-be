@@ -28,7 +28,7 @@ conf_static = ConnectionConfig(
 
 async def try_send_email(recipient: str, name: str = "User"):
     """
-    Function untuk kirim email \n
+    Function for sending email\n
     """
     fm = FastMail(conf_static)
     await fm.send_message(

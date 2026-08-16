@@ -153,8 +153,8 @@ class TestUserProfile(IsolatedAsyncioTestCase):
     async def test_update_user_profile(self):
         # Given
         new_user = User(
-            username="testuser",
-            email="testuser@local.com",
+            username="testuser-profile-picture",
+            email="testuser-profile-picture@local.com",
             password=generate_hash_password("password"),
             is_active=True,
         )
@@ -168,7 +168,10 @@ class TestUserProfile(IsolatedAsyncioTestCase):
         client = TestClient(app)
         response = client.post(
             "/auth/email/signin/",
-            json={"email": "testuser@local.com", "password": "password"},
+            json={
+                "email": "testuser-profile-picture@local.com",
+                "password": "password",
+            },
         )
         token = response.json().get("token", None)
 
@@ -330,7 +333,7 @@ class TestUserProfile(IsolatedAsyncioTestCase):
         self.assertIn("retain_my_data_for_next_pycon", response.json())
 
     async def test_update_profile_with_valid_location(self):
-        """Test update user profile dengan location hierarchy yang valid"""
+        """Test updating a user profile with a valid location hierarchy."""
         # Given
         new_user = User(
             username="testuser",
@@ -506,8 +509,8 @@ class TestUserProfile(IsolatedAsyncioTestCase):
     async def test_update_user_profile_null_profile_picture(self):
         # Given
         new_user = User(
-            username="testuser",
-            email="testuser@local.com",
+            username="testuser-profile-existing-picture",
+            email="testuser-profile-existing-picture@local.com",
             password=generate_hash_password("password"),
             profile_picture="existing_profile.png",
             is_active=True,
@@ -522,7 +525,10 @@ class TestUserProfile(IsolatedAsyncioTestCase):
         client = TestClient(app)
         response = client.post(
             "/auth/email/signin/",
-            json={"email": "testuser@local.com", "password": "password"},
+            json={
+                "email": "testuser-profile-existing-picture@local.com",
+                "password": "password",
+            },
         )
         token = response.json().get("token", None)
 
@@ -568,7 +574,7 @@ class TestUserProfileBase(IsolatedAsyncioTestCase):
             "first_name": "Budi",
             "last_name": "Santoso",
             "email": "budi.santoso@example.com",
-            "bio": "Seorang software engineer handal dengan pengalaman lebih dari 5 tahun.",
+            "bio": "An experienced software engineer with more than five years of experience.",
             "job_category": JobCategory.TECH_SPECIALIST,
             "job_title": "Senior Backend Developer",
             "country_id": 1,
@@ -581,7 +587,7 @@ class TestUserProfileBase(IsolatedAsyncioTestCase):
         }
 
     async def test_valid_data_parses_correctly(self):
-        """Tes Happy Path: Memastikan data yang sepenuhnya valid berhasil di-parse."""
+        """Happy path: fully valid data is parsed successfully."""
         try:
             model = UserProfileCreate(**self.valid_data)
             self.assertEqual(model.first_name, "Budi")
@@ -592,12 +598,12 @@ class TestUserProfileBase(IsolatedAsyncioTestCase):
             self.fail(f"UserProfileCreate raised ValidationError unexpectedly! \n{e}")
 
     async def test_missing_required_field_raises_error(self):
-        """Tes Validasi Wajib: Memastikan error jika field wajib (first_name) hilang."""
+        """Required-field validation: an error is raised when first_name is missing."""
         data = self.valid_data.copy()
         del data["first_name"]
         with self.assertRaises(ValidationError) as context:
             UserProfileCreate(**data)
-        # Cek apakah error yang muncul benar untuk field 'first_name'
+        # Check the error for the 'first_name' field
         self.assertIn("first_name", str(context.exception))
 
     async def test_field_constraints_validation(self):
@@ -649,11 +655,11 @@ class TestUserProfileBase(IsolatedAsyncioTestCase):
 
 class TestUserProfileCreate(IsolatedAsyncioTestCase):
     async def test_inherits_validations_from_base(self):
-        """Tes Inheritance: Memastikan UserProfileCreate punya validasi yang sama dengan Base."""
+        """Test that UserProfileCreate inherits the same validation as the base model."""
         # Cukup uji satu kasus, misalnya field wajib, untuk membuktikan pewarisan.
         invalid_data = {
             "last_name": "Santoso",
-            "bio": "Seorang software engineer handal dengan pengalaman lebih dari 5 tahun.",
+            "bio": "An experienced software engineer with more than five years of experience.",
             "job_category": JobCategory.TECH_SPECIALIST,
             "job_title": "Senior Backend Developer",
             "country_id": 1,
@@ -672,7 +678,7 @@ class TestUserProfileDB(IsolatedAsyncioTestCase):
             "first_name": "Budi",
             "last_name": "Santoso",
             "email": "budi.santoso@example.com",
-            "bio": "Seorang software engineer handal dengan pengalaman lebih dari 5 tahun.",
+            "bio": "An experienced software engineer with more than five years of experience.",
             "job_category": JobCategory.TECH_SPECIALIST,
             "job_title": "Senior Backend Developer",
             "country_id": 1,
@@ -686,7 +692,7 @@ class TestUserProfileDB(IsolatedAsyncioTestCase):
         self.valid_db_data["profile_picture"] = "https://example.com/profile.png"
 
     async def test_valid_db_data_parses_correctly(self):
-        """Tes Happy Path: Memastikan data valid untuk DB (dengan profile_picture) berhasil."""
+        """Happy path: valid data for the database, including profile_picture, is accepted."""
         try:
             model = UserProfileDB(**self.valid_db_data)
             self.assertEqual(model.first_name, "Budi")

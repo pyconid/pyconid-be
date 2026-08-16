@@ -109,7 +109,7 @@ class CityReference(BaseModel):
 
 
 class UserProfileBase(BaseModel):
-    # Satu validator untuk semua field tags
+    # One validator for all tag fields
     @field_validator("interest", "expertise", mode="before", check_fields=False)
     def split_tags(cls, v: Any) -> List[str]:
         if v is None:
@@ -132,7 +132,7 @@ class UserProfileUpdateBase(UserProfileBase):
             )
         return str(v)
 
-    # Satu validator untuk semua username
+    # One validator for all username fields
 
     @field_validator(
         "github_username",
@@ -150,7 +150,7 @@ class UserProfileUpdateBase(UserProfileBase):
             raise ValueError("Please provide only the username, not the full URL.")
         return str(v)
 
-    # Satu validator untuk semua checkbox agreement
+    # One validator for all agreement checkboxes
     @field_validator(
         "coc_acknowledged", "terms_agreed", "privacy_agreed", check_fields=False
     )
@@ -160,11 +160,11 @@ class UserProfileUpdateBase(UserProfileBase):
         return v
 
 
-# 2. Model CREATE mewarisi dari BASE
+# 2. The CREATE model inherits from BASE
 
 
 class UserProfilePublic(UserProfileBase):
-    """Model untuk data publik yang bisa dilihat semua orang."""
+    """Model for public data visible to everyone."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -201,9 +201,9 @@ class UserProfilePublic(UserProfileBase):
 
 
 class UserProfilePrivate(UserProfilePublic):
-    """Model untuk data privat yang hanya bisa dilihat oleh user itu sendiri."""
+    """Model for private data visible only to the user."""
 
-    """Berisi semua field umum yang diisi oleh user dari form."""
+    """Contains all common fields submitted by the user through the form."""
     model_config = ConfigDict(from_attributes=True)
 
     email: EmailStr | None
@@ -263,7 +263,7 @@ class UserProfilePrivate(UserProfilePublic):
 
 
 class UserProfileCreate(UserProfileUpdateBase):
-    """Berisi semua field umum yang diisi oleh user dari form."""
+    """Contains all common fields submitted by the user through the form."""
 
     first_name: str = Field(
         ..., min_length=1, max_length=50, description="User's first name."
@@ -307,7 +307,7 @@ class UserProfileCreate(UserProfileUpdateBase):
         "Non Participant", description="Type of participant."
     )
     # Location
-    # Di-handle dengan API menggunakan ID dari dropdown
+    # Handled by the API using the ID from the dropdown
     country_id: int = Field(..., description="User's country ID.")
     state_id: Optional[int] = Field(None, description="User's state/province ID.")
     city_id: Optional[int] = Field(None, description="User's city ID.")
@@ -354,8 +354,8 @@ class UserProfileCreate(UserProfileUpdateBase):
 
 class UserProfileDB(UserProfileCreate):
     """
-    Model yang merepresentasikan data lengkap di database.
-    Mewarisi semua dari Base dan menambahkan field 'profile_picture'.
+    Model representing the complete database record.
+    Inherits all fields from Base and adds the 'profile_picture' field.
     """
 
     # Profile Info
@@ -433,7 +433,7 @@ if __name__ == "__main__":
         # Cek hasil konversi tags
         print(f"\nInterests as list: {profile.interest}")
     except Exception as e:
-        print("❌ Gagal validasi data valid:")
+        print("❌ Failed to validate valid data:")
         print(e)
 
     print("\n" + "-" * 50 + "\n")
@@ -458,7 +458,7 @@ if __name__ == "__main__":
     try:
         profile = UserProfileDB(**invalid_data)
     except Exception as e:
-        print("❌ Gagal validasi data tidak valid (sesuai harapan):")
+        print("❌ Expected validation failure for invalid data:")
         print(e)
 
 

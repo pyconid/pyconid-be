@@ -15,14 +15,22 @@ from schemas.user_profile import UserProfileDB
 
 
 def get_user_by_username(db: Session, username: str) -> Optional[User]:
-    stmt = select(User).where(User.username == username)
-    data = db.execute(stmt).scalar()
+    stmt = (
+        select(User)
+        .where(User.username == username)
+        .order_by(User.is_active.desc().nullslast(), User.created_at.desc().nullslast())
+    )
+    data = db.execute(stmt).scalars().first()
     return data
 
 
 def get_user_by_email(db: Session, email: str) -> Optional[User]:
-    stmt = select(User).where(User.email == email)
-    data = db.execute(stmt).scalar()
+    stmt = (
+        select(User)
+        .where(User.email == email)
+        .order_by(User.is_active.desc().nullslast(), User.created_at.desc().nullslast())
+    )
+    data = db.execute(stmt).scalars().first()
     return data
 
 

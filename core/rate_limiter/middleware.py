@@ -16,6 +16,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self,
         app,
         backend: type[InMemoryRateLimiter],
+        backend_kwargs: Optional[dict] = None,
         enabled: bool = True,
         limit: int = 100,
         window: int = 60,
@@ -29,6 +30,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         Args:
             app: FastAPI application
             backend: InMemoryRateLimiter
+            backend_kwargs: Configuration passed to the backend constructor
             enabled: Enable/disable rate limiting
             limit: Maximum requests per window
             window: Time window in seconds
@@ -37,7 +39,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             use_fingerprint: Use browser fingerprint for anonymous users (more secure)
         """
         super().__init__(app)
-        self.backend = backend()
+        self.backend = backend(**(backend_kwargs or {}))
         self.enabled = enabled
         self.limit = limit
         self.window = window

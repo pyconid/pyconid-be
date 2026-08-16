@@ -34,16 +34,16 @@ def get_all_speakers(
             | (User.email.ilike(search_pattern))
         )
 
-    # Tambahkan pagination (offset + limit)
-    # Hitung total data sebelum pagination
+    # Add pagination (offset + limit).
+    # Count the total records before pagination.
     total_count = db.scalar(select(func.count()).select_from(stmt.subquery()))
-    # Eksekusi query dan ambil hasilnya
+    # Execute the query and retrieve the results.
     results = db.scalars(stmt).all()
-    # 🔥 ubah ORM objects ke Pydantic models
+    # Convert ORM objects to Pydantic models.
     results_schema = [SpeakerResponseItem.model_validate(r) for r in results]
     # Hitung total halaman
 
-    # Return hasil dalam bentuk dict (siap untuk API response)
+    # Return the result as a dictionary ready for the API response.
     return {
         "page": 1,
         "page_size": 1,
@@ -60,7 +60,7 @@ def get_speaker_per_page_by_search(
     order_dir: Literal["asc", "desc"] = "asc",
     search: Optional[str] = None,
 ):
-    # Hitung offset (data mulai dari baris ke-berapa)
+    # Calculate the offset (starting row).
     offset = (page - 1) * page_size
 
     # Query dasar
@@ -88,14 +88,14 @@ def get_speaker_per_page_by_search(
     # Tambahkan pagination (offset + limit)
     stmt = stmt.offset(offset).limit(page_size)
 
-    # Eksekusi query dan ambil hasilnya
+    # Execute the query and retrieve the results.
     results = db.scalars(stmt).all()
-    # 🔥 ubah ORM objects ke Pydantic models
+    # Convert ORM objects to Pydantic models.
     results_schema = [SpeakerResponseItem.model_validate(r) for r in results]
     # Hitung total halaman
     page_count = (total_count + page_size - 1) // page_size if total_count else 0
 
-    # Return hasil dalam bentuk dict (siap untuk API response)
+    # Return the result as a dictionary ready for the API response.
     return {
         "page": page,
         "page_size": page_size,

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import hmac
 import secrets
 import traceback
 from abc import ABC, abstractmethod
@@ -9,7 +10,14 @@ import jwt
 import pytz
 from sqlalchemy import or_, select
 from models.User import User
-from settings import ALGORITHM, FRONTEND_BASE_URL, SECRET_KEY, TZ
+from settings import (
+    ALGORITHM,
+    FRONTEND_BASE_URL,
+    REGISTRATION_CLOSED_MESSAGE,
+    REGISTRATION_ENABLED,
+    SECRET_KEY,
+    TZ,
+)
 from authlib.integrations.starlette_client import OAuth
 from sqlalchemy.orm import Session
 
@@ -68,28 +76,40 @@ class BaseOAuthService(ABC):
     def _update_user_provider_info(
         self, user: User, user_info: UserInfoResponse
     ) -> User:
-        """Update user dengan provider-specific fields"""
+        """Update user with provider-specific fields."""
         pass
 
     @abstractmethod
     def _set_user_provider_fields(
         self, user_data: dict, user_info: UserInfoResponse, provider_id: str
     ) -> dict:
-        """Set provider-specific fields untuk user baru"""
+        """Set provider-specific fields for a new user."""
         pass
 
-    def _create_oauth_state(self, redirect_uri: Optional[str] = None) -> str:
+    def _create_oauth_state(
+        self, redirect_uri: Optional[str] = None, provider: Optional[str] = None
+    ) -> str:
         payload = {
             "redirect_uri": redirect_uri,
+            "provider": provider,
             "nonce": secrets.token_urlsafe(16),
             "exp": datetime.now(tz=pytz.timezone("UTC")) + timedelta(minutes=10),
             "iat": datetime.now(tz=pytz.timezone("UTC")),
         }
         return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
-    def _verify_oauth_state(self, state: str) -> dict:
+    def _verify_oauth_state(
+        self,
+        state: str,
+        expected_state: Optional[str] = None,
+        expected_provider: Optional[str] = None,
+    ) -> dict:
         try:
             payload = jwt.decode(state, SECRET_KEY, algorithms=[ALGORITHM])
+            if not expected_state or not hmac.compare_digest(state, expected_state):
+                raise HTTPException(status_code=400, detail="Invalid OAuth state")
+            if expected_provider and payload.get("provider") != expected_provider:
+                raise HTTPException(status_code=400, detail="Invalid OAuth state")
             return payload
         except jwt.ExpiredSignatureError:
             raise HTTPException(status_code=400, detail="OAuth state expired")
@@ -122,7 +142,10 @@ class BaseOAuthService(ABC):
                 f"{FRONTEND_BASE_URL.rstrip('/')}/auth/{provider_name}/callback/"
             )
 
-            state = self._create_oauth_state(redirect_uri=redirect_uri)
+            state = self._create_oauth_state(
+                redirect_uri=redirect_uri, provider=provider_name
+            )
+            request.state.oauth_state = state
 
             if follow_redirect:
                 return await client.authorize_redirect(
@@ -168,7 +191,11 @@ class BaseOAuthService(ABC):
             )
 
         try:
-            state_payload = self._verify_oauth_state(state)
+            state_payload = self._verify_oauth_state(
+                state=state,
+                expected_state=request.cookies.get("oauth_state"),
+                expected_provider=provider_name,
+            )
             redirect_uri = state_payload.get("redirect_uri")
         except HTTPException as e:
             raise e
@@ -223,7 +250,9 @@ class BaseOAuthService(ABC):
         if provider_email:
             stmt = select(User).where(
                 or_(
-                    User.username == provider_email, User.google_email == provider_email
+                    User.username == provider_email,
+                    User.email == provider_email,
+                    User.google_email == provider_email,
                 )
             )
             user = db.execute(stmt).scalar()
@@ -231,6 +260,9 @@ class BaseOAuthService(ABC):
         is_new_user = False
 
         if not user:
+            if not REGISTRATION_ENABLED:
+                raise HTTPException(status_code=403, detail=REGISTRATION_CLOSED_MESSAGE)
+
             user_data = {
                 "username": provider_email if provider_email else provider_username,
                 "password": None,

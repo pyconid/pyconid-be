@@ -164,7 +164,7 @@ async def update_user_profile(
         except LocationValidationError as e:
             return common_response(BadRequest(message=str(e)))
 
-    # semua field dari UserProfileCreate.
+    # All fields from UserProfileCreate.
     user_profile_pydantic = UserProfileCreate(
         first_name=first_name,
         last_name=last_name,
@@ -204,7 +204,7 @@ async def update_user_profile(
         terms_agreed=terms_agreed,
         privacy_agreed=privacy_agreed,
     )
-    # 1. Simpan file dan dapatkan URL
+    # 1. Save the file and obtain its URL.
     profile_picture_url = None
     if profile_picture:
         if is_over_max_file_size(upload_file=profile_picture):
@@ -218,18 +218,17 @@ async def update_user_profile(
         await upload_file(upload_file=profile_picture, path=profile_picture_url)
         # profile_picture_url = save_file_and_get_url(profile_picture)
 
-    # 2. Gabungkan data. user_form.model_dump() akan berisi
+    # 2. Combine the data from user_profile_pydantic.model_dump().
     user_profile_dict = user_profile_pydantic.model_dump()
     user_profile_dict["participant_type"] = user.participant_type
     if profile_picture_url:
         user_profile_dict["profile_picture"] = profile_picture_url
 
-    # 3. Validasi dengan model DB
-    # UserProfileDB akan mengharapkan semua field dari Create + profile_picture
+    # 3. Validate against the database model.
+    # UserProfileDB expects all Create fields plus profile_picture.
     validated_profile = UserProfileDB(**user_profile_dict)
 
-    # ... simpan ke database ...
-    # Simpan ke posgres
+    # Save to PostgreSQL.
     try:
         userRepo.update_user_profile(
             db=db, user_id=user.id, profile_data=validated_profile

@@ -14,6 +14,11 @@ from models import engine, db, get_db_sync, get_db_sync_for_test
 from models.Token import Token
 from models.User import User
 from main import app
+from routes.auth import (
+    auth_rate_limiter,
+    forgot_password_rate_limiter,
+    signup_rate_limiter,
+)
 from settings import SECRET_KEY, ALGORITHM, FRONTEND_BASE_URL
 
 
@@ -26,6 +31,7 @@ def create_test_oauth_state(redirect_uri=None, provider="github"):
 
     payload = {
         "redirect_uri": redirect_uri,
+        "provider": provider,
         "nonce": secrets.token_urlsafe(16),
         "exp": datetime.now(tz=pytz.timezone("UTC")) + timedelta(minutes=10),
         "iat": datetime.now(tz=pytz.timezone("UTC")),
@@ -46,6 +52,24 @@ class TestAuth(IsolatedAsyncioTestCase):
         # bind an individual Session to the connection, selecting
         # "create_savepoint" join_transaction_mode
         self.db = db(bind=self.connection, join_transaction_mode="create_savepoint")
+        for limiter in (
+            auth_rate_limiter,
+            forgot_password_rate_limiter,
+            signup_rate_limiter,
+        ):
+            limiter._requests.clear()
+
+    def assert_token_expirations(self, data):
+        self.assertEqual(
+            data["token_exp"],
+            jwt.decode(data["token"], SECRET_KEY, algorithms=[ALGORITHM])["exp"],
+        )
+        self.assertEqual(
+            data["refresh_token_exp"],
+            jwt.decode(data["refresh_token"], SECRET_KEY, algorithms=[ALGORITHM])[
+                "exp"
+            ],
+        )
 
     async def test_login_then_logout(self):
         # Given
@@ -74,6 +98,9 @@ class TestAuth(IsolatedAsyncioTestCase):
         self.assertIsNotNone(token)
         session = self.db.query(Token).where(Token.user_id == user_id).scalar()
         self.assertIsNotNone(session)
+        self.assertNotEqual(session.token, token)
+
+        refresh_token = response.json()["refresh_token"]
 
         # When 2
         response = client.post(
@@ -102,8 +129,13 @@ class TestAuth(IsolatedAsyncioTestCase):
         # Expect 4
         self.assertEqual(response.status_code, 200)
         stmt = select(Token).where(Token.user_id == new_user.id)
-        token = self.db.execute(stmt).scalar()
-        self.assertIsNone(token)
+        token_row = self.db.execute(stmt).scalar()
+        self.assertIsNone(token_row)
+
+        refresh_response = client.post(
+            "/auth/refresh-token/", json={"refresh_token": refresh_token}
+        )
+        self.assertEqual(refresh_response.status_code, 401)
 
         # When 5
         response = client.get(
@@ -128,6 +160,21 @@ class TestAuth(IsolatedAsyncioTestCase):
             data = response.json()
             self.assertIn("redirect", data)
             self.assertTrue(data["redirect"].startswith("https://github.com"))
+
+    @patch("main.REGISTRATION_ENABLED", False)
+    async def test_github_oauth_signin_remains_available_when_registration_closed(self):
+        app.dependency_overrides[get_db_sync] = get_db_sync_for_test(db=self.db)
+        client = TestClient(app)
+
+        with patch.object(github_service, "initiate_oauth") as mock_initiate:
+            mock_initiate.return_value = (
+                "https://github.com/login/oauth/authorize?client_id=test"
+            )
+
+            response = client.post("/auth/github/signin/")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("redirect", response.json())
 
     async def test_github_oauth_verified_endpoint_new_user(self):
         app.dependency_overrides[get_db_sync] = get_db_sync_for_test(db=self.db)
@@ -172,6 +219,7 @@ class TestAuth(IsolatedAsyncioTestCase):
 
         # Create valid JWT state for testing
         valid_state = create_test_oauth_state(provider="github")
+        client.cookies.set("oauth_state", valid_state)
 
         with patch.object(github_service, "oauth", mock_oauth):
             response = client.post(
@@ -187,6 +235,7 @@ class TestAuth(IsolatedAsyncioTestCase):
             self.assertEqual(data["username"], "test@example.com")
             self.assertTrue(data["is_new_user"])
             self.assertEqual(data["github_username"], "testuser")
+            self.assert_token_expirations(data)
 
             stmt = select(User).where(User.username == "test@example.com")
             created_user = self.db.execute(stmt).scalar()
@@ -248,6 +297,7 @@ class TestAuth(IsolatedAsyncioTestCase):
 
         # Create valid JWT state for testing
         valid_state = create_test_oauth_state(provider="github")
+        client.cookies.set("oauth_state", valid_state)
 
         with patch.object(github_service, "oauth", mock_oauth):
             response = client.post(
@@ -291,6 +341,7 @@ class TestAuth(IsolatedAsyncioTestCase):
 
         # Create valid JWT state for testing
         valid_state = create_test_oauth_state(provider="github")
+        client.cookies.set("oauth_state", valid_state)
 
         with patch.object(github_service, "oauth", mock_oauth):
             response = client.post(
@@ -328,6 +379,7 @@ class TestAuth(IsolatedAsyncioTestCase):
 
         # Create valid JWT state for testing
         valid_state = create_test_oauth_state(provider="github")
+        client.cookies.set("oauth_state", valid_state)
 
         with patch.object(github_service, "oauth", mock_oauth):
             response = client.post(
@@ -394,6 +446,7 @@ class TestAuth(IsolatedAsyncioTestCase):
 
         # Create valid JWT state for testing
         valid_state = create_test_oauth_state(provider="google")
+        client.cookies.set("oauth_state", valid_state)
 
         with patch.object(google_service, "oauth", mock_oauth):
             response = client.post(
@@ -409,6 +462,7 @@ class TestAuth(IsolatedAsyncioTestCase):
             self.assertEqual(data["username"], "testuser@gmail.com")
             self.assertTrue(data["is_new_user"])
             self.assertEqual(data["google_email"], "testuser@gmail.com")
+            self.assert_token_expirations(data)
 
             stmt = select(User).where(User.username == "testuser@gmail.com")
             created_user = self.db.execute(stmt).scalar()
@@ -465,6 +519,7 @@ class TestAuth(IsolatedAsyncioTestCase):
 
         # Create valid JWT state for testing
         valid_state = create_test_oauth_state(provider="google")
+        client.cookies.set("oauth_state", valid_state)
 
         with patch.object(google_service, "oauth", mock_oauth):
             response = client.post(
@@ -507,6 +562,7 @@ class TestAuth(IsolatedAsyncioTestCase):
 
         # Create valid JWT state for testing
         valid_state = create_test_oauth_state(provider="google")
+        client.cookies.set("oauth_state", valid_state)
 
         with patch.object(google_service, "oauth", mock_oauth):
             response = client.post(
@@ -544,6 +600,7 @@ class TestAuth(IsolatedAsyncioTestCase):
 
         # Create valid JWT state for testing
         valid_state = create_test_oauth_state(provider="google")
+        client.cookies.set("oauth_state", valid_state)
 
         with patch.object(google_service, "oauth", mock_oauth):
             response = client.post(
@@ -606,6 +663,7 @@ class TestAuth(IsolatedAsyncioTestCase):
 
         # Create valid JWT state for testing
         valid_state = create_test_oauth_state(provider="google")
+        client.cookies.set("oauth_state", valid_state)
 
         with patch.object(google_service, "oauth", mock_oauth):
             response = client.post(

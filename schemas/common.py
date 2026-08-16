@@ -26,7 +26,7 @@ class ValidationErrorResponse(BaseModel):
         from_attributes=True,
         json_schema_extra={
             "example": {
-                "message": "Terjadi kesalahan validasi pada data form (Pydantic validation).",
+                "message": "A validation error occurred in the form data (Pydantic validation).",
                 "errors": [
                     {
                         "field": "bio",

@@ -1,19 +1,17 @@
 from datetime import datetime
 from typing import Optional
+import secrets
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-import random
-import string
 
+from core.security import hash_token
 from models.ResetPassword import ResetPassword
 from models.User import User
 
 
 def generate_token() -> str:
-    length = 25
-    characters = string.ascii_uppercase + string.ascii_lowercase + string.digits
-    token = "".join(random.choice(characters) for _ in range(length))
-    return token
+    return secrets.token_urlsafe(32)
 
 
 def get_reset_password_by_user(db: Session, user: User) -> Optional[ResetPassword]:
@@ -23,8 +21,12 @@ def get_reset_password_by_user(db: Session, user: User) -> Optional[ResetPasswor
 
 
 def get_reset_password_by_token(db: Session, token: str) -> Optional[ResetPassword]:
-    stmt = select(ResetPassword).where(ResetPassword.token == token)
+    token_hash = hash_token(token)
+    stmt = select(ResetPassword).where(ResetPassword.token.in_([token_hash, token]))
     data = db.execute(stmt).scalar()
+    if data and data.token != token_hash:
+        data.token = token_hash
+        db.add(data)
     return data
 
 
@@ -37,7 +39,7 @@ def create_reset_password(
 ) -> ResetPassword:
     new_reset_password = ResetPassword(
         user=user,
-        token=token,
+        token=hash_token(token),
         expired_at=expired_at,
     )
     db.add(new_reset_password)
@@ -55,7 +57,7 @@ def update_reset_password(
     is_commit: bool = True,
 ) -> ResetPassword:
     reset_password.user = user
-    reset_password.token = token
+    reset_password.token = hash_token(token)
     reset_password.expired_at = expired_at
     if is_commit:
         db.commit()
