@@ -67,6 +67,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       REGISTRY: ghcr.io
+      GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+      IMAGE_NAME: ${{ github.ref_name == 'dev' && 'pyconid26-be-dev' || 'pyconid26-be-prod' }}
     permissions:
       contents: read
       packages: write
@@ -82,46 +84,24 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
-        run: echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
-
-      - name: Generate .env file (dev)
-        if: ${{ github.ref_name == 'dev' }}
-        run: printf "%s" "${{ secrets.DEV_ENV_FILE }}" > .env
-
-      - name: Generate .env file (prod)
-        if: ${{ github.ref_name == 'main' || startsWith(github.ref, 'refs/tags/v') }}
-        run: printf "%s" "${{ secrets.PROD_ENV_FILE }}" > .env
-      
-      - name: Load IMAGE_NAME from .env
-        run: |
-          IMAGE_NAME=$(grep '^IMAGE_NAME=' .env | cut -d'=' -f2)
-          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
-      
-      - name: Load GHCR_USERNAME from .env
-        run: |
-          GHCR_USERNAME=$(grep '^GHCR_USERNAME=' .env | cut -d'=' -f2)
-          echo "GHCR_USERNAME=$GHCR_USERNAME" >> $GITHUB_ENV
+        run: echo "${{ secrets.GHCR_TOKEN }}" | docker login "$REGISTRY" -u "$GHCR_USERNAME" --password-stdin
 
       - name: Build Docker image
         run: |
           docker build \
-            -t ghcr.io/${{ env.GHCR_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} \
+            -t "$REGISTRY/$GHCR_USERNAME/$IMAGE_NAME:${{ steps.version.outputs.version }}" \
             .
 
       - name: Push Docker image
-        run: |
-          docker push ghcr.io/${{ env.GHCR_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+        run: docker push "$REGISTRY/$GHCR_USERNAME/$IMAGE_NAME:${{ steps.version.outputs.version }}"
 
       - name: Remove local Docker image
-        run: |
-          docker image rm ghcr.io/${{ env.GHCR_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+        if: always()
+        run: docker image rm "$REGISTRY/$GHCR_USERNAME/$IMAGE_NAME:${{ steps.version.outputs.version }}" || true
 
       - name: Logout Docker
-        run: docker logout ghcr.io
-
-      - name: Cleanup workspace (Remove .env)
         if: always()
-        run: rm -f .env
+        run: docker logout "$REGISTRY"
 
   deploy-dev:
     name: Deploy to Development
@@ -133,40 +113,44 @@ jobs:
       url: https://2026-api-dev.pycon.id/
     env:
       DEPLOY_DIR: /home/pycon/pyconid26-be-dev
+      REGISTRY: ghcr.io
+      GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+      IMAGE_NAME: pyconid26-be-dev
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Read version
-        id: version
-        run: echo "version=$(cat version.txt)" >> $GITHUB_OUTPUT
 
       - name: Sync docker-compose.yaml and version.txt to deploy dir
         run: |
           mkdir -p "$DEPLOY_DIR"
           cp docker-compose.yaml version.txt "$DEPLOY_DIR"/
 
-      - name: Update IMAGE_TAG and deploy
+      - name: Sync image coordinates into server .env and deploy
         run: |
           cd "$DEPLOY_DIR"
+          touch .env
 
-          # Update IMAGE_TAG di .env sesuai version.txt
-          VERSION=$(cat version.txt)
-          if grep -q '^IMAGE_TAG=' .env; then
-            sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" .env
-          else
-            echo "IMAGE_TAG=$VERSION" >> .env
-          fi
+          upsert_env() {
+            if grep -q "^$1=" .env; then
+              sed -i "s|^$1=.*|$1=$2|" .env
+            else
+              echo "$1=$2" >> .env
+            fi
+          }
 
-          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+          upsert_env REGISTRY "$REGISTRY"
+          upsert_env GHCR_USERNAME "$GHCR_USERNAME"
+          upsert_env IMAGE_NAME "$IMAGE_NAME"
+          upsert_env IMAGE_TAG "$(cat version.txt)"
 
-          # Pull dan deploy
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login "$REGISTRY" -u "$GHCR_USERNAME" --password-stdin
+
           docker compose --env-file .env pull
           docker compose --env-file .env up -d --force-recreate
 
       - name: Logout Docker
         if: always()
-        run: docker logout ghcr.io
+        run: docker logout "$REGISTRY"
 
   deploy-prod:
     name: Deploy to Production
@@ -178,36 +162,41 @@ jobs:
       url: https://2026-api.pycon.id/
     env:
       DEPLOY_DIR: /home/pycon/pyconid26-be-prod
+      REGISTRY: ghcr.io
+      GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+      IMAGE_NAME: pyconid26-be-prod
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Read version
-        id: version
-        run: echo "version=$(cat version.txt)" >> $GITHUB_OUTPUT
 
       - name: Sync docker-compose.yaml and version.txt to deploy dir
         run: |
           mkdir -p "$DEPLOY_DIR"
           cp docker-compose.yaml version.txt "$DEPLOY_DIR"/
 
-      - name: Update IMAGE_TAG and deploy
+      - name: Sync image coordinates into server .env and deploy
         run: |
           cd "$DEPLOY_DIR"
+          touch .env
 
-          VERSION=$(cat version.txt)
-          if grep -q '^IMAGE_TAG=' .env; then
-            sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" .env
-          else
-            echo "IMAGE_TAG=$VERSION" >> .env
-          fi
+          upsert_env() {
+            if grep -q "^$1=" .env; then
+              sed -i "s|^$1=.*|$1=$2|" .env
+            else
+              echo "$1=$2" >> .env
+            fi
+          }
 
-          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+          upsert_env REGISTRY "$REGISTRY"
+          upsert_env GHCR_USERNAME "$GHCR_USERNAME"
+          upsert_env IMAGE_NAME "$IMAGE_NAME"
+          upsert_env IMAGE_TAG "$(cat version.txt)"
 
-          # Pull dan deploy
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login "$REGISTRY" -u "$GHCR_USERNAME" --password-stdin
+
           docker compose --env-file .env pull
           docker compose --env-file .env up -d --force-recreate
 
       - name: Logout Docker
         if: always()
-        run: docker logout ghcr.io
+        run: docker logout "$REGISTRY"
