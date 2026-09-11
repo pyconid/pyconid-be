@@ -127,121 +127,87 @@ jobs:
     name: Deploy to Development
     needs: [docker-build]
     if: ${{ github.ref_name == 'dev' }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted]
     environment:
       name: development
       url: https://2026-api-dev.pycon.id/
+    env:
+      DEPLOY_DIR: /home/pycon/pyconid26-be-dev
 
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Read version
         id: version
         run: echo "version=$(cat version.txt)" >> $GITHUB_OUTPUT
-        
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.7.0
-        with:
-          ssh-private-key: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
-          
-      - name: Setup known_hosts
+
+      - name: Sync docker-compose.yaml and version.txt to deploy dir
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.DEV_SSH_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
-      
-      - name: Copy docker-compose.yaml and version.txt to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.DEV_SSH_HOST }}
-          username: ${{ secrets.DEV_SSH_USER }}
-          port: ${{ secrets.DEV_SSH_PORT || '22' }}
-          key: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
-          source: "docker-compose.yaml,version.txt"
-          target: /home/${{ secrets.DEV_SSH_USER }}/pyconid26-be-dev/
-          overwrite: true
+          mkdir -p "$DEPLOY_DIR"
+          cp docker-compose.yaml version.txt "$DEPLOY_DIR"/
 
-      - name: SSH - Update Version and Deploy
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.DEV_SSH_HOST }}
-          username: ${{ secrets.DEV_SSH_USER }}
-          port: ${{ secrets.DEV_SSH_PORT || '22' }}
-          key: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
-          script: |
-            cd ~/pyconid26-be-dev
+      - name: Update IMAGE_TAG and deploy
+        run: |
+          cd "$DEPLOY_DIR"
 
-            # Update IMAGE_TAG di .env sesuai version.txt
-            VERSION=$(cat version.txt)
-            if grep -q '^IMAGE_TAG=' .env; then
-              sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" .env
-            else
-              echo "IMAGE_TAG=$VERSION" >> .env
-            fi
+          # Update IMAGE_TAG di .env sesuai version.txt
+          VERSION=$(cat version.txt)
+          if grep -q '^IMAGE_TAG=' .env; then
+            sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" .env
+          else
+            echo "IMAGE_TAG=$VERSION" >> .env
+          fi
 
-            # Login ke GHCR pakai akun premium
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
 
-            # Pull dan deploy
-            docker compose --env-file .env pull
-            docker compose --env-file .env up -d --force-recreate
+          # Pull dan deploy
+          docker compose --env-file .env pull
+          docker compose --env-file .env up -d --force-recreate
+
+      - name: Logout Docker
+        if: always()
+        run: docker logout ghcr.io
 
   deploy-prod:
     name: Deploy to Production
     needs: [docker-build]
     if: ${{ github.ref_name == 'main' || startsWith(github.ref, 'refs/tags/v') }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
     environment:
       name: production
       url: https://2026-api.pycon.id/
+    env:
+      DEPLOY_DIR: /home/pycon/pyconid26-be-prod
 
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Read version
         id: version
         run: echo "version=$(cat version.txt)" >> $GITHUB_OUTPUT
-        
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.7.0
-        with:
-          ssh-private-key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
-          
-      - name: Setup known_hosts
+
+      - name: Sync docker-compose.yaml and version.txt to deploy dir
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.PROD_SSH_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+          mkdir -p "$DEPLOY_DIR"
+          cp docker-compose.yaml version.txt "$DEPLOY_DIR"/
 
-      - name: Copy docker-compose.yaml and version.txt to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.PROD_SSH_HOST }}
-          username: ${{ secrets.PROD_SSH_USER }}
-          port: ${{ secrets.PROD_SSH_PORT || '22' }}
-          key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
-          source: "docker-compose.yaml,version.txt"
-          target: /home/${{ secrets.PROD_SSH_USER }}/pyconid26-be-prod/
-          overwrite: true
+      - name: Update IMAGE_TAG and deploy
+        run: |
+          cd "$DEPLOY_DIR"
 
-      - name: SSH - Update Version and Deploy
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.PROD_SSH_HOST }}
-          username: ${{ secrets.PROD_SSH_USER }}
-          port: ${{ secrets.PROD_SSH_PORT || '22' }}
-          key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
-          script: |
-            cd ~/pyconid26-be-prod
+          VERSION=$(cat version.txt)
+          if grep -q '^IMAGE_TAG=' .env; then
+            sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" .env
+          else
+            echo "IMAGE_TAG=$VERSION" >> .env
+          fi
 
-            VERSION=$(cat version.txt)
-            if grep -q '^IMAGE_TAG=' .env; then
-              sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" .env
-            else
-              echo "IMAGE_TAG=$VERSION" >> .env
-            fi
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
 
-            # Login ke GHCR pakai akun premium
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+          # Pull dan deploy
+          docker compose --env-file .env pull
+          docker compose --env-file .env up -d --force-recreate
 
-            # Pull dan deploy
-            docker compose --env-file .env pull
-            docker compose --env-file .env up -d --force-recreate
+      - name: Logout Docker
+        if: always()
+        run: docker logout ghcr.io
