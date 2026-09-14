@@ -34,7 +34,7 @@ def initial_schedules_seeders(db: Session, is_commit: bool = True):
     speakers = db.query(Speaker.id).all()
 
     if not speakers:
-        print("Tidak ada speaker di database. Tambahkan speaker terlebih dahulu.")
+        print("No speakers found in the database. Add speakers first.")
         return
 
     schedule_types = db.query(ScheduleType.id).all()
@@ -53,7 +53,7 @@ def initial_schedules_seeders(db: Session, is_commit: bool = True):
         schedule = Schedule(
             title=f"Topic {i}",
             schedule_type_id=schedule_type_id,
-            description=f"Deskripsi untuk topik pembicaraan {i}.",
+            description=f"Description for talk topic {i}.",
             start=start_time,
             end=end_time,
         )

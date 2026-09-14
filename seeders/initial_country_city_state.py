@@ -25,7 +25,7 @@ def load_json_maybe_gz(path_without_ext: str):
             return json.load(f)
     else:
         raise FileNotFoundError(
-            f"Tidak ditemukan {gz_path.name} maupun {json_path.name}"
+            f"Neither {gz_path.name} nor {json_path.name} was found"
         )
 
 

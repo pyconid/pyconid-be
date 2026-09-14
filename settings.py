@@ -24,9 +24,15 @@ def str_to_bool(string: str) -> bool:
 # Environtment
 ENVIRONTMENT = os.environ.get("ENVIRONTMENT")
 
+# Registration feature flag. Set to false to temporarily stop new registrations.
+REGISTRATION_ENABLED = str_to_bool(os.environ.get("REGISTRATION_ENABLED", "True"))
+REGISTRATION_CLOSED_MESSAGE = "Registration is temporarily closed"
+
 # JWT conf
 JWT_PREFIX = os.environ.get("JWT_PREFIX", "Bearer")
-SECRET_KEY = os.environ.get("SECRET_KEY", "pyconid25_secret")
+SECRET_KEY = os.environ.get("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY must be set")
 ALGORITHM = os.environ.get("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", 30)
 if ACCESS_TOKEN_EXPIRE_MINUTES is not None:
@@ -37,6 +43,16 @@ if REFRESH_TOKEN_EXPIRE_MINUTES is not None:
 
 # Timezone
 TZ = os.environ.get("TZ", "Asia/Jakarta")
+
+# CORS
+CORS_ALLOWED_ORIGINS = [
+    origin.strip().rstrip("/")
+    for origin in os.environ.get("CORS_ALLOWED_ORIGINS", "http://localhost:3000").split(
+        ","
+    )
+    if origin.strip()
+]
+CORS_ALLOW_ALL_ORIGINS = "*" in CORS_ALLOWED_ORIGINS
 
 # Postgresql conf
 POSTGRES_USER = os.environ.get("POSTGRES_USER")
@@ -70,9 +86,21 @@ USE_CREDENTIALS = str_to_bool(os.environ.get("USE_CREDENTIALS", "True"))
 RATE_LIMIT_ENABLED = str_to_bool(os.environ.get("RATE_LIMIT_ENABLED", "False"))
 RATE_LIMIT_PER_MINUTE = int(os.environ.get("RATE_LIMIT_PER_MINUTE", "20"))
 RATE_LIMIT_WINDOW = int(os.environ.get("RATE_LIMIT_WINDOW", "60"))
+RATE_LIMIT_MAX_KEYS = int(os.environ.get("RATE_LIMIT_MAX_KEYS", "10000"))
+RATE_LIMIT_CLEANUP_INTERVAL = int(os.environ.get("RATE_LIMIT_CLEANUP_INTERVAL", "60"))
 RATE_LIMIT_EXCLUDED_PATHS = os.environ.get(
     "RATE_LIMIT_EXCLUDED_PATHS", "/docs,/openapi.json"
 ).split(",")
+FORGOT_PASSWORD_RATE_LIMIT_PER_EMAIL = int(
+    os.environ.get("FORGOT_PASSWORD_RATE_LIMIT_PER_EMAIL", "5")
+)
+FORGOT_PASSWORD_RATE_LIMIT_WINDOW = int(
+    os.environ.get("FORGOT_PASSWORD_RATE_LIMIT_WINDOW", "3600")
+)
+AUTH_RATE_LIMIT_PER_WINDOW = int(os.environ.get("AUTH_RATE_LIMIT_PER_WINDOW", "5"))
+AUTH_RATE_LIMIT_WINDOW = int(os.environ.get("AUTH_RATE_LIMIT_WINDOW", "60"))
+SIGNUP_RATE_LIMIT_PER_WINDOW = int(os.environ.get("SIGNUP_RATE_LIMIT_PER_WINDOW", "5"))
+SIGNUP_RATE_LIMIT_WINDOW = int(os.environ.get("SIGNUP_RATE_LIMIT_WINDOW", "3600"))
 
 # Mayar Payment Gateway conf
 MAYAR_API_KEY = os.environ.get("MAYAR_API_KEY", "")

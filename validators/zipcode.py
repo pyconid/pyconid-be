@@ -1,29 +1,42 @@
 import traceback
-import pgeocode
+from collections import OrderedDict
 from typing import Optional, Tuple
+
+import pgeocode
 
 
 class ZipCodeValidator:
-    def __init__(self):
-        self._nominatim_cache = {}
+    def __init__(self, max_cached_countries: int = 3):
+        if max_cached_countries < 1:
+            raise ValueError("max_cached_countries must be greater than zero")
+        self._nominatim_cache = OrderedDict()
+        self._max_cached_countries = max_cached_countries
 
     def _get_nominatim(self, country_code: str):
         """Get or create Nominatim instance for country"""
-        if country_code not in self._nominatim_cache:
-            try:
-                self._nominatim_cache[country_code] = pgeocode.Nominatim(country_code)
-            except Exception:
-                return None
-        return self._nominatim_cache[country_code]
+        if country_code in self._nominatim_cache:
+            self._nominatim_cache.move_to_end(country_code)
+            return self._nominatim_cache[country_code]
+
+        try:
+            nominatim = pgeocode.Nominatim(country_code)
+        except Exception:
+            return None
+
+        self._nominatim_cache[country_code] = nominatim
+        self._nominatim_cache.move_to_end(country_code)
+        while len(self._nominatim_cache) > self._max_cached_countries:
+            self._nominatim_cache.popitem(last=False)
+        return nominatim
 
     def validate_zipcode(
         self, zip_code: str, country_code: str
     ) -> Tuple[bool, Optional[str]]:
         """
-        Validate zip code untuk country tertentu
+        Validate a zip code for a specific country
 
         Args:
-            zip_code: Postal/zip code yang akan divalidasi
+            zip_code: Postal/zip code to validate
             country_code: ISO2 country code (e.g., 'ID', 'US', 'GB')
 
         Returns:

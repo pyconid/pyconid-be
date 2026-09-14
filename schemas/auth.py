@@ -14,12 +14,29 @@ class LoginEmailRequest(BaseModel):
     password: str
 
 
-class LoginSuccessResponse(BaseModel):
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+
+class TokenPairResponse(BaseModel):
+    token: str
+    refresh_token: str
+    token_exp: int
+    refresh_token_exp: int
+
+
+class LoginSuccessResponse(TokenPairResponse):
     id: str
     username: str
     is_active: bool
-    token: str
+
+
+class SwaggerTokenResponse(BaseModel):
+    access_token: str
     refresh_token: str
+    token_type: str
+    token_exp: int
+    refresh_token_exp: int
 
 
 class MeResponse(BaseModel):
@@ -67,12 +84,10 @@ class GithubSignInResponse(BaseModel):
     redirect: str
 
 
-class GithubVerifiedResponse(BaseModel):
+class GithubVerifiedResponse(TokenPairResponse):
     id: str
     username: str
     is_active: bool
-    token: str
-    refresh_token: str
     is_new_user: bool
     github_username: str
 
@@ -81,12 +96,10 @@ class GoogleSignInResponse(BaseModel):
     redirect: str
 
 
-class GoogleVerifiedResponse(BaseModel):
+class GoogleVerifiedResponse(TokenPairResponse):
     id: str
     username: str
     is_active: bool
-    token: str
-    refresh_token: str
     is_new_user: bool
     google_email: str
 
